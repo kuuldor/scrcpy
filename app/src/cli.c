@@ -100,7 +100,8 @@ enum {
     OPT_NO_WINDOW,
     OPT_MOUSE_BIND,
     OPT_NO_MOUSE_HOVER,
-    OPT_NO_GAME_CONTROLLER
+    OPT_NO_GAME_CONTROLLER,
+    OPT_GAMEPAD_TOUCHMAP
 };
 
 struct sc_option {
@@ -562,6 +563,12 @@ static const struct sc_option options[] = {
         .longopt_id = OPT_NO_GAME_CONTROLLER,
         .longopt = "no-game-controller",
         .text = "Disable game controller support.",
+    },
+    {
+        .longopt_id = OPT_GAMEPAD_TOUCHMAP,
+        .longopt = "gamepad-touchmap",
+        .argdesc = "map_file",
+        .text = "Specify config file mapping game controller input to touch.",
     },
     {
         .longopt_id = OPT_NO_KEY_REPEAT,
@@ -2377,6 +2384,10 @@ parse_args_with_getopt(struct scrcpy_cli_args *args, int argc, char *argv[],
                 opts->mipmaps = false;
                 break;
             case OPT_NO_GAME_CONTROLLER:
+                opts->forward_game_controllers = false;
+                break;
+            case OPT_GAMEPAD_TOUCHMAP:
+                opts->touchmap_file = optarg;
                 opts->forward_game_controllers = false;
                 break;
             case OPT_NO_KEY_REPEAT:
