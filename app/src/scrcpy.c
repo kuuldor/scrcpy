@@ -140,6 +140,11 @@ sdl_set_hints(const char *render_driver) {
     if (!SDL_SetHint(SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS, "0")) {
         LOGW("Could not disable minimize on focus loss");
     }
+
+    // Allow Joystick/Gamepad Input in background
+    if (!SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1")) {
+        LOGW("Could not use gamepad in background");
+    }
 }
 
 static void
