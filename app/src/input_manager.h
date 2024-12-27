@@ -21,6 +21,7 @@ struct sc_input_manager {
     struct sc_file_pusher *fp;
     struct sc_screen *screen;
     SDL_GameController *game_controllers[MAX_GAME_CONTROLLERS];
+    struct sc_gptm_gamepad_touchmap * game_touchmap;
 
     struct sc_key_processor *kp;
     struct sc_mouse_processor *mp;
@@ -28,6 +29,8 @@ struct sc_input_manager {
     struct sc_mouse_bindings mouse_bindings;
     bool has_secondary_click;
     bool forward_game_controllers;
+    const char * touchmap_file;
+    
     bool forward_all_clicks;
     bool legacy_paste;
     bool clipboard_autosync;
@@ -57,6 +60,7 @@ struct sc_input_manager_params {
 
     struct sc_mouse_bindings mouse_bindings;
     bool forward_game_controllers;
+    const char * touchmap_file;
     bool forward_all_clicks;
     bool legacy_paste;
     bool clipboard_autosync;
@@ -67,8 +71,7 @@ void
 sc_input_manager_init(struct sc_input_manager *im,
                       const struct sc_input_manager_params *params);
 
-void
-sc_input_manager_handle_event(struct sc_input_manager *im,
-                              const SDL_Event *event);
+void sc_input_manager_handle_event(struct sc_input_manager *im,
+                                   const SDL_Event *event);
 
 #endif

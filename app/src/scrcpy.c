@@ -727,6 +727,7 @@ scrcpy(struct scrcpy_options *options) {
             .mp = mp,
             .mouse_bindings = options->mouse_bindings,
             .forward_game_controllers = options->forward_game_controllers,
+            .touchmap_file = options->touchmap_file,
             .forward_all_clicks = options->forward_all_clicks,
             .legacy_paste = options->legacy_paste,
             .clipboard_autosync = options->clipboard_autosync,

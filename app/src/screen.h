@@ -81,6 +81,7 @@ struct sc_screen_params {
 
     struct sc_mouse_bindings mouse_bindings;
     bool forward_game_controllers;
+    const char * touchmap_file;
     bool forward_all_clicks;
     bool legacy_paste;
     bool clipboard_autosync;
