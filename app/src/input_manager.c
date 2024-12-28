@@ -1108,14 +1108,12 @@ input_manager_process_controller_device(struct sc_input_manager *im,
             return;
     }
 
-    if (im->forward_game_controllers) {
-        struct sc_control_msg msg;
-        msg.type = SC_CONTROL_MSG_TYPE_INJECT_GAME_CONTROLLER_DEVICE;
-        msg.inject_game_controller_device.id = id;
-        msg.inject_game_controller_device.event = event->type;
-        msg.inject_game_controller_device.event -= SDL_CONTROLLERDEVICEADDED;
-        sc_controller_push_msg(im->controller, &msg);
-    }
+    struct sc_control_msg msg;
+    msg.type = SC_CONTROL_MSG_TYPE_INJECT_GAME_CONTROLLER_DEVICE;
+    msg.inject_game_controller_device.id = id;
+    msg.inject_game_controller_device.event = event->type;
+    msg.inject_game_controller_device.event -= SDL_CONTROLLERDEVICEADDED;
+    sc_controller_push_msg(im->controller, &msg);
 }
 
 static void 
