@@ -394,6 +394,8 @@ simulate_virtual_touch(struct sc_input_manager *im,
     msg.inject_touch_event.action_button = 0;
     msg.inject_touch_event.buttons = 0;
 
+    LOGI("Simulate touch ID(%ld) Point(%d, %d) Up(%d)", touch_id, point.x, point.y, up);
+
     if (!sc_controller_push_msg(im->controller, &msg)) {
         LOGW("Could not request 'inject virtual finger event'");
         return false;
@@ -1052,12 +1054,14 @@ input_manager_process_controller_device(struct sc_input_manager *im,
             return;
     }
 
-    struct sc_control_msg msg;
-    msg.type = SC_CONTROL_MSG_TYPE_INJECT_GAME_CONTROLLER_DEVICE;
-    msg.inject_game_controller_device.id = id;
-    msg.inject_game_controller_device.event = event->type;
-    msg.inject_game_controller_device.event -= SDL_CONTROLLERDEVICEADDED;
-    sc_controller_push_msg(im->controller, &msg);
+    if (im->forward_game_controllers) {
+        struct sc_control_msg msg;
+        msg.type = SC_CONTROL_MSG_TYPE_INJECT_GAME_CONTROLLER_DEVICE;
+        msg.inject_game_controller_device.id = id;
+        msg.inject_game_controller_device.event = event->type;
+        msg.inject_game_controller_device.event -= SDL_CONTROLLERDEVICEADDED;
+        sc_controller_push_msg(im->controller, &msg);
+    }
 }
 
 static void 
@@ -1235,9 +1239,7 @@ sc_input_manager_handle_event(struct sc_input_manager *im, const SDL_Event *even
                 break;
             }
 
-            if (im->forward_game_controllers || im->game_touchmap != NULL) {
-                input_manager_process_controller_device(im, &event->cdevice);
-            }
+            input_manager_process_controller_device(im, &event->cdevice);
             break;
     }
 }
