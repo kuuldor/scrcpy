@@ -462,6 +462,15 @@ open_touchmap_file(struct sc_input_manager *im) {
 }
 
 static void
+turn_off_touchmap(struct sc_input_manager *im) {
+    if (im->game_touchmap != NULL) {
+        free(im->game_touchmap);
+        im->game_touchmap = NULL;
+    }
+    im->forward_game_controllers = true;
+}
+
+static void
 sc_input_manager_process_key(struct sc_input_manager *im,
                              const SDL_KeyboardEvent *event) {
     // controller is NULL if --no-control is requested
@@ -645,10 +654,14 @@ sc_input_manager_process_key(struct sc_input_manager *im,
                 }
                 return;
             case SDLK_t:
-                if (control && !shift && !repeat && down && !paused
+                if (control && !repeat && down && !paused
                         && im->kp) {
-                    // Show OpenFileDialog to select TouchMap file
-                    open_touchmap_file(im);
+                    if (shift) {
+                        turn_off_touchmap(im);
+                    } else {
+                        // Show OpenFileDialog to select TouchMap file
+                        open_touchmap_file(im);
+                    }
                 }
                 return;                
         }
