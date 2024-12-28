@@ -8,6 +8,7 @@
 #include "util/log.h"
 
 #include "touchmap.h"
+#include "third_party/tfd/tinyfiledialogs.h"
 
 #define SC_SDL_SHORTCUT_MODS_MASK (KMOD_CTRL | KMOD_ALT | KMOD_GUI)
 
@@ -102,7 +103,7 @@ sc_input_manager_init(struct sc_input_manager *im,
     if (im->touchmap_file != NULL) {
         im->game_touchmap = parse_touchmap_config(im->touchmap_file);
         if (im->game_touchmap == NULL) {
-            LOGE("Fail to parse touchmap file");
+            LOGE("Fail to parse touchmap file %s", im->touchmap_file);
         }
     }
 }
@@ -394,7 +395,7 @@ simulate_virtual_touch(struct sc_input_manager *im,
     msg.inject_touch_event.action_button = 0;
     msg.inject_touch_event.buttons = 0;
 
-    LOGI("Simulate touch ID(%ld) Point(%d, %d) Up(%d)", touch_id, point.x, point.y, up);
+    LOGD("Simulate touch ID(%ld) Point(%d, %d) Up(%d)", touch_id, point.x, point.y, up);
 
     if (!sc_controller_push_msg(im->controller, &msg)) {
         LOGW("Could not request 'inject virtual finger event'");
@@ -425,6 +426,39 @@ inverse_point(struct sc_point point, struct sc_size size,
         point.y = size.height - point.y;
     }
     return point;
+}
+
+static void
+open_touchmap_file(struct sc_input_manager *im) {
+    assert(im->controller);
+
+    char const * lFilterPatterns[2]={"*.json", "*.*"};
+    char * file_name = tinyfd_openFileDialog(
+        "Open Touch Map File",
+        "",
+        2,
+        lFilterPatterns,
+        "JSON file",
+        0
+    );
+
+    if (file_name == NULL) {
+        LOGI("Open File cancelled");
+        return;
+    }
+
+    LOGI("Selected file: %s", file_name);
+
+    if (im->game_touchmap != NULL) {
+        free(im->game_touchmap);
+        im->game_touchmap = NULL;
+    }
+    im->game_touchmap = parse_touchmap_config(file_name);
+    if (im->game_touchmap == NULL) {
+        LOGE("Fail to parse touchmap file %s", file_name);
+        return;
+    }
+    im->forward_game_controllers = false;
 }
 
 static void
@@ -610,6 +644,13 @@ sc_input_manager_process_key(struct sc_input_manager *im,
                     open_hard_keyboard_settings(im);
                 }
                 return;
+            case SDLK_t:
+                if (control && !shift && !repeat && down && !paused
+                        && im->kp) {
+                    // Show OpenFileDialog to select TouchMap file
+                    open_touchmap_file(im);
+                }
+                return;                
         }
 
         return;
@@ -848,7 +889,7 @@ sc_input_manager_process_mouse_button(struct sc_input_manager *im,
                                                          &im->mouse_bindings),
     };
 
-    LOGI("Mouse Click (%d, %d) -> Touch %ld (%d, %d)", event->x, event->y, evt.pointer_id, evt.position.point.x, evt.position.point.y);
+    LOGD("Mouse Click (%d, %d) -> Touch %ld (%d, %d)", event->x, event->y, evt.pointer_id, evt.position.point.x, evt.position.point.y);
     assert(im->mp->ops->process_mouse_click);
     im->mp->ops->process_mouse_click(im->mp, &evt);
 
@@ -1197,7 +1238,7 @@ sc_input_manager_handle_event(struct sc_input_manager *im, const SDL_Event *even
                 break;
             }
 
-            LOGI("Gamepad Axis: (%d, %d, %d)", event->caxis.which, event->caxis.axis, event->caxis.value);
+            LOGD("Gamepad Axis: (%d, %d, %d)", event->caxis.which, event->caxis.axis, event->caxis.value);
 
             if (im->forward_game_controllers) {
                 input_manager_process_controller_axis(im, &event->caxis);
@@ -1224,7 +1265,7 @@ sc_input_manager_handle_event(struct sc_input_manager *im, const SDL_Event *even
             if (!control) {
                 break;
             }
-            LOGI("Gamepad Button: (%d, %d, %d)", event->cbutton.which, event->cbutton.button, event->cbutton.state);
+            LOGD("Gamepad Button: (%d, %d, %d)", event->cbutton.which, event->cbutton.button, event->cbutton.state);
 
             if (im->forward_game_controllers) {
                 input_manager_process_controller_button(im, &event->cbutton);

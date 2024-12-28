@@ -1041,6 +1041,10 @@ static const struct sc_shortcut shortcuts[] = {
         .text = "Enable/disable FPS counter (print frames/second in logs)",
     },
     {
+        .shortcuts = { "MOD+t" },
+        .text = "Show an Open File Dialog to select a gamepad-touchmap file",
+    },
+    {
         .shortcuts = { "Ctrl+click-and-move" },
         .text = "Pinch-to-zoom and rotate from the center of the screen",
     },
