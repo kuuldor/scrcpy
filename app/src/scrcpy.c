@@ -797,6 +797,7 @@ aoa_complete:
             .mp = mp,
             .gp = gp,
             .mouse_bindings = options->mouse_bindings,
+            .touchmap_file = options->touchmap_file,
             .legacy_paste = options->legacy_paste,
             .clipboard_autosync = options->clipboard_autosync,
             .shortcut_mods = options->shortcut_mods,

@@ -23,6 +23,8 @@ struct sc_input_manager {
     struct sc_key_processor *kp;
     struct sc_mouse_processor *mp;
     struct sc_gamepad_processor *gp;
+    struct sc_gptm_gamepad_touchmap *game_touchmap;
+    const char *touchmap_file;
 
     struct sc_mouse_bindings mouse_bindings;
     bool legacy_paste;
@@ -53,8 +55,11 @@ struct sc_input_manager_params {
     struct sc_key_processor *kp;
     struct sc_mouse_processor *mp;
     struct sc_gamepad_processor *gp;
+    const char * touchmap_file;
 
     struct sc_mouse_bindings mouse_bindings;
+    bool forward_game_controllers;
+    bool forward_all_clicks;
     bool legacy_paste;
     bool clipboard_autosync;
     uint8_t shortcut_mods; // OR of enum sc_shortcut_mod values
@@ -64,8 +69,7 @@ void
 sc_input_manager_init(struct sc_input_manager *im,
                       const struct sc_input_manager_params *params);
 
-void
-sc_input_manager_handle_event(struct sc_input_manager *im,
-                              const SDL_Event *event);
+void sc_input_manager_handle_event(struct sc_input_manager *im,
+                                   const SDL_Event *event);
 
 #endif
