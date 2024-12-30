@@ -353,12 +353,21 @@ simulate_virtual_touch(struct sc_input_manager *im,
     msg.inject_touch_event.action_button = 0;
     msg.inject_touch_event.buttons = 0;
 
+    LOGI("Simulate touch ID(%ld) Point(%d, %d) Up(%d)", touch_id, point.x, point.y, up);
+
     if (!sc_controller_push_msg(im->controller, &msg)) {
         LOGW("Could not request 'inject virtual finger event'");
         return false;
     }
 
     return true;
+}
+
+static bool
+simulate_virtual_finger(struct sc_input_manager *im,
+                        enum android_motionevent_action action,
+                        struct sc_point point) {
+    return simulate_virtual_touch(im, SC_POINTER_ID_VIRTUAL_FINGER, action, point);
 }
 
 static struct sc_point
@@ -1018,7 +1027,6 @@ sc_input_manager_process_file(struct sc_input_manager *im,
     }
 }
 
-
 static void 
 sc_handle_touchmap_button(struct sc_input_manager *im, uint8_t button, uint8_t state) {
     struct sc_gptm_gamepad_touchmap * map = im->game_touchmap;
@@ -1083,7 +1091,6 @@ sc_handle_skill_button_direction(struct sc_input_manager *im, struct sc_gptm_tou
 
     simulate_virtual_touch(im, touch_btn->finger_id, AMOTION_EVENT_ACTION_MOVE, touch_btn->current_pos);
 }
-
 static void 
 sc_handle_touchmap_skill_cast(struct sc_input_manager *im, bool is_x_axis, int64_t value) {
     struct sc_gptm_gamepad_touchmap *map = im->game_touchmap;
@@ -1193,7 +1200,8 @@ sc_input_manager_handle_event(struct sc_input_manager *im,
             if (!control) {
                 break;
             }
-            sc_input_manager_process_file(im, &event->drop);
+            input_manager_process_controller_device(im, &event->cdevice);
+            break;
         }
     }
 }
