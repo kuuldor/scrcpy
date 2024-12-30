@@ -111,6 +111,7 @@ enum {
     OPT_ANGLE,
     OPT_NO_VD_SYSTEM_DECORATIONS,
     OPT_NO_VD_DESTROY_CONTENT,
+    OPT_GAMEPAD_TOUCHMAP
 };
 
 struct sc_option {
@@ -636,6 +637,12 @@ static const struct sc_option options[] = {
         // deprecated
         .longopt_id = OPT_NO_DISPLAY,
         .longopt = "no-display",
+    },
+    {
+        .longopt_id = OPT_GAMEPAD_TOUCHMAP,
+        .longopt = "gamepad-touchmap",
+        .argdesc = "map_file",
+        .text = "Specify config file mapping game controller input to touch.",
     },
     {
         .longopt_id = OPT_NO_KEY_REPEAT,
@@ -2491,6 +2498,9 @@ parse_args_with_getopt(struct scrcpy_cli_args *args, int argc, char *argv[],
                 break;
             case OPT_NO_MIPMAPS:
                 opts->mipmaps = false;
+                break;
+            case OPT_GAMEPAD_TOUCHMAP:
+                opts->touchmap_file = optarg;
                 break;
             case OPT_NO_KEY_REPEAT:
                 opts->forward_key_repeat = false;
