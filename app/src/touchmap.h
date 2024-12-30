@@ -7,6 +7,8 @@
 
 #define SC_GPTM_BASE_FINGER_ID   UINT64_C(100)
 
+#define SC_GPTM_WALK_CONTROL_DEADZONE   25
+
 struct sc_gptm_walk_control {
     struct sc_point center;
     int32_t radius;
