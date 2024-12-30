@@ -383,6 +383,14 @@ inverse_point(struct sc_point point, struct sc_size size,
     return point;
 }
 
+static inline void
+turn_off_touchmap(struct sc_input_manager *im) {
+    if (im->game_touchmap != NULL) {
+        free(im->game_touchmap);
+        im->game_touchmap = NULL;
+    }
+}
+
 static void
 open_touchmap_file(struct sc_input_manager *im) {
     assert(im->controller);
@@ -409,14 +417,6 @@ open_touchmap_file(struct sc_input_manager *im) {
     if (im->game_touchmap == NULL) {
         LOGE("Fail to parse touchmap file %s", file_name);
         return;
-    }
-}
-
-static inline void
-turn_off_touchmap(struct sc_input_manager *im) {
-    if (im->game_touchmap != NULL) {
-        free(im->game_touchmap);
-        im->game_touchmap = NULL;
     }
 }
 
@@ -1109,23 +1109,21 @@ sc_handle_touchmap_walk(struct sc_input_manager *im, bool is_x_axis, int64_t val
         walk->current_pos.y = walk->center.y + (value * walk->radius / SDL_MAX_SINT16);
     }
 
-    int delta_x, delta_y, distance;
-    delta_x = walk->current_pos.x - walk->center.x;
-    delta_y = walk->current_pos.y - walk->center.y;
+    int wctl_x, wctl_y, distance;
+    wctl_x = walk->current_pos.x - walk->center.x;
+    wctl_y = walk->current_pos.y - walk->center.y;
 
-    distance = delta_x * delta_x + delta_y * delta_y;
-    if (distance < 100 && walk->touch_down)
-    {
-        walk->touch_down = false;
-        simulate_virtual_touch(im, walk->finger_id, AMOTION_EVENT_ACTION_UP, walk->center);
-    }
-    else if (!walk->touch_down)
-    {
-        walk->touch_down = true;
-        simulate_virtual_touch(im, walk->finger_id, AMOTION_EVENT_ACTION_DOWN, walk->center);
-    }
-    else
-    {
+    distance = wctl_x * wctl_x + wctl_y * wctl_y;
+    if (distance < SC_GPTM_WALK_CONTROL_DEADZONE) {
+        if (walk->touch_down) {
+            walk->touch_down = false;
+            simulate_virtual_touch(im, walk->finger_id, AMOTION_EVENT_ACTION_UP, walk->center);
+        }
+    } else {
+        if (!walk->touch_down) {
+            walk->touch_down = true;
+            simulate_virtual_touch(im, walk->finger_id, AMOTION_EVENT_ACTION_DOWN, walk->center);
+        }
         simulate_virtual_touch(im, walk->finger_id, AMOTION_EVENT_ACTION_MOVE, walk->current_pos);
     }
 }
@@ -1249,8 +1247,7 @@ sc_input_manager_handle_event(struct sc_input_manager *im,
             if (!control) {
                 break;
             }
-            input_manager_process_controller_device(im, &event->cdevice);
-            break;
+            sc_input_manager_process_file(im, &event->drop);
         }
     }
 }
