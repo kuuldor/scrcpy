@@ -39,6 +39,7 @@ src = [
     'src/hid/hid_keyboard.c',
     'src/hid/hid_mouse.c',
     'src/third_party/cjson/cJSON.c',
+    'src/third_party/tfd/tinyfiledialogs.c',
     'src/trait/frame_source.c',
     'src/trait/packet_source.c',
     'src/uhid/gamepad_uhid.c',
