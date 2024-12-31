@@ -10,6 +10,7 @@
 
 #include "touchmap.h"
 #include "third_party/tfd/tinyfiledialogs.h"
+#include "events.h"
 
 void
 sc_input_manager_init(struct sc_input_manager *im,
@@ -384,16 +385,16 @@ inverse_point(struct sc_point point, struct sc_size size,
 }
 
 static inline void
-turn_off_touchmap(struct sc_input_manager *im) {
+free_up_touchmap(struct sc_input_manager *im) {
     if (im->game_touchmap != NULL) {
         free(im->game_touchmap);
         im->game_touchmap = NULL;
     }
 }
 
-static void
-open_touchmap_file(struct sc_input_manager *im) {
-    assert(im->controller);
+static int open_file_dialog_thread(void *data) {
+    struct sc_input_manager *im = (struct sc_input_manager *)data;
+    (void)im;
 
     char const * lFilterPatterns[2]={"*.json", "*.*"};
     char * file_name = tinyfd_openFileDialog(
@@ -407,16 +408,32 @@ open_touchmap_file(struct sc_input_manager *im) {
 
     if (file_name == NULL) {
         LOGI("Open File cancelled");
-        return;
+        return 1;
     }
 
-    LOGI("Selected file: %s", file_name);
+    LOGI("Selected file: %s", file_name);    
 
-    turn_off_touchmap(im);
-    im->game_touchmap = parse_touchmap_config(file_name);
-    if (im->game_touchmap == NULL) {
-        LOGE("Fail to parse touchmap file %s", file_name);
-        return;
+    // Send custom event to notify the main thread
+    SDL_Event event;
+    event.type = SC_EVENT_FILE_DIALOG;
+    
+    int len = SDL_strlen(file_name) + 1;
+    event.user.data1 = SDL_malloc(len);
+    SDL_strlcpy(event.user.data1, file_name, len);
+    SDL_PushEvent(&event);
+
+    return 0;
+}
+
+static void
+open_touchmap_file(struct sc_input_manager *im) {
+    assert(im->controller);
+
+    SDL_Thread *thread = SDL_CreateThread(open_file_dialog_thread, "FileDialogThread", im);
+    if (!thread) {
+        LOGE("Failed to create thread: %s", SDL_GetError());
+    } else {
+        SDL_DetachThread(thread);
     }
 }
 
@@ -610,7 +627,7 @@ sc_input_manager_process_key(struct sc_input_manager *im,
                 if (control && !repeat && down && !paused
                         && im->kp) {
                     if (shift) {
-                        turn_off_touchmap(im);
+                        free_up_touchmap(im);
                     } else {
                         // Show OpenFileDialog to select TouchMap file
                         open_touchmap_file(im);
@@ -1248,6 +1265,22 @@ sc_input_manager_handle_event(struct sc_input_manager *im,
                 break;
             }
             sc_input_manager_process_file(im, &event->drop);
+            break;
+        }
+        case SC_EVENT_FILE_DIALOG: {
+            const char * file_name = event->user.data1;
+            if (file_name == NULL) {
+                break;
+            }
+            LOGI("Got FILE OPEN Event with file name: %s", file_name);
+
+            free_up_touchmap(im);
+            im->game_touchmap = parse_touchmap_config(file_name);
+            if (im->game_touchmap == NULL) {
+                LOGE("Fail to parse touchmap file %s", file_name);
+            }
+            SDL_free((void*)file_name);
+            break;
         }
     }
 }
