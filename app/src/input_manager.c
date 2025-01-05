@@ -359,7 +359,7 @@ simulate_virtual_touch(struct sc_input_manager *im,
     msg.inject_touch_event.action_button = 0;
     msg.inject_touch_event.buttons = 0;
 
-    LOGD("Simulate touch ID(%ld) Point(%d, %d) Up(%d)", touch_id, point.x, point.y, up);
+    LOGD("Simulate touch ID(%ld) Point(%d, %d) Action(%d)", touch_id, point.x, point.y, action);
 
     if (!sc_controller_push_msg(im->controller, &msg)) {
         LOGW("Could not request 'inject virtual finger event'");
@@ -1099,6 +1099,15 @@ sc_input_manager_process_file(struct sc_input_manager *im,
     }
 }
 
+
+static void 
+sc_handle_skill_button_direction(struct sc_input_manager *im, struct sc_gptm_touch_button *touch_btn, struct sc_point pos) {
+    touch_btn->current_pos.x = touch_btn->center.x + (pos.x * touch_btn->radius / SDL_MAX_SINT16);
+    touch_btn->current_pos.y = touch_btn->center.y + (pos.y * touch_btn->radius / SDL_MAX_SINT16);
+
+    simulate_virtual_touch(im, touch_btn->finger_id, AMOTION_EVENT_ACTION_MOVE, touch_btn->current_pos);
+}
+
 static void 
 sc_handle_touchmap_button(struct sc_input_manager *im, uint8_t button, uint8_t state) {
     struct sc_gptm_gamepad_touchmap * map = im->game_touchmap;
@@ -1113,28 +1122,42 @@ sc_handle_touchmap_button(struct sc_input_manager *im, uint8_t button, uint8_t s
         if (!touch_btn->touch_down) {
             touch_btn->touch_down = true;
             simulate_virtual_touch(im, touch_btn->finger_id, AMOTION_EVENT_ACTION_DOWN, touch_btn->center);
+
+            if (touch_btn->is_skill) {
+                // Hard code to use the rigth joystick to control skill 
+                struct sc_point joystick = im->game_touchmap->joystick[1];
+
+                int delta_x, delta_y, distance;
+                delta_x = joystick.x * touch_btn->radius / SDL_MAX_SINT16;
+                delta_y = joystick.y * touch_btn->radius / SDL_MAX_SINT16;
+                distance = delta_x * delta_x + delta_y * delta_y;
+
+                if (distance >= SC_GPTM_WALK_CONTROL_DEADZONE) {
+                    sc_handle_skill_button_direction(im, touch_btn, joystick);
+                }
+            } else {
+                touch_btn->current_pos = touch_btn->center;
+            }
         }
     } else {
         if (touch_btn->touch_down) {
             touch_btn->touch_down = false;
-            simulate_virtual_touch(im, touch_btn->finger_id, AMOTION_EVENT_ACTION_UP, touch_btn->center);
+            simulate_virtual_touch(im, touch_btn->finger_id, AMOTION_EVENT_ACTION_UP, touch_btn->current_pos);
         }
     }
 }
 
 static void 
-sc_handle_touchmap_walk(struct sc_input_manager *im, bool is_x_axis, int64_t value) {
+sc_handle_touchmap_walk(struct sc_input_manager *im, struct sc_point pos) {
     struct sc_gptm_walk_control *walk = &im->game_touchmap->walk;
 
-    if (is_x_axis) {
-        walk->current_pos.x = walk->center.x + (value * walk->radius / SDL_MAX_SINT16);
-    } else {
-        walk->current_pos.y = walk->center.y + (value * walk->radius / SDL_MAX_SINT16);
-    }
-
     int wctl_x, wctl_y, distance;
-    wctl_x = walk->current_pos.x - walk->center.x;
-    wctl_y = walk->current_pos.y - walk->center.y;
+    wctl_x = pos.x * walk->radius / SDL_MAX_SINT16;
+    wctl_y = pos.y * walk->radius / SDL_MAX_SINT16;
+
+    walk->current_pos.x = walk->center.x + wctl_x;
+    walk->current_pos.y = walk->center.y + wctl_y;
+
 
     distance = wctl_x * wctl_x + wctl_y * wctl_y;
     if (distance < SC_GPTM_WALK_CONTROL_DEADZONE) {
@@ -1152,24 +1175,31 @@ sc_handle_touchmap_walk(struct sc_input_manager *im, bool is_x_axis, int64_t val
 }
 
 static void 
-sc_handle_skill_button_direction(struct sc_input_manager *im, struct sc_gptm_touch_button *touch_btn, bool is_x_axis, int64_t value) {
-    if (is_x_axis) {
-        touch_btn->current_pos.x = touch_btn->center.x + (value * touch_btn->radius / SDL_MAX_SINT16);
-    } else {
-        touch_btn->current_pos.y = touch_btn->center.y + (value * touch_btn->radius / SDL_MAX_SINT16);
-    }
-
-    simulate_virtual_touch(im, touch_btn->finger_id, AMOTION_EVENT_ACTION_MOVE, touch_btn->current_pos);
-}
-static void 
-sc_handle_touchmap_skill_cast(struct sc_input_manager *im, bool is_x_axis, int64_t value) {
+sc_handle_touchmap_skill_cast(struct sc_input_manager *im, struct sc_point pos) {
     struct sc_gptm_gamepad_touchmap *map = im->game_touchmap;
 
     for (int i = 0; i < map->button_cnt; i++) {
         struct sc_gptm_touch_button * btn = &map->buttons[i];
         if (btn->is_skill && btn->touch_down) {
-            sc_handle_skill_button_direction(im, btn, is_x_axis, value);
+            sc_handle_skill_button_direction(im, btn, pos);
         }
+    }
+}
+
+static void 
+sc_handle_touchmap_joystick(struct sc_input_manager *im, int idx, int64_t value, bool is_x_axis) {
+    struct sc_point *joystick = &im->game_touchmap->joystick[idx];
+
+    if (is_x_axis) {
+        joystick->x = value;
+    } else {
+        joystick->y = value;
+    }
+
+    if (idx == 0) {
+        sc_handle_touchmap_walk(im, *joystick);
+    } else if (idx == 1) {
+        sc_handle_touchmap_skill_cast(im, *joystick);
     }
 }
 
@@ -1240,11 +1270,11 @@ sc_input_manager_handle_event(struct sc_input_manager *im,
                 switch (event->caxis.axis) {
                 case SDL_CONTROLLER_AXIS_LEFTX:
                 case SDL_CONTROLLER_AXIS_LEFTY:
-                    sc_handle_touchmap_walk(im, event->caxis.axis == SDL_CONTROLLER_AXIS_LEFTX, value);
+                    sc_handle_touchmap_joystick(im, 0, value, event->caxis.axis == SDL_CONTROLLER_AXIS_LEFTX);
                     break;
                 case SDL_CONTROLLER_AXIS_RIGHTX:
                 case SDL_CONTROLLER_AXIS_RIGHTY:
-                    sc_handle_touchmap_skill_cast(im, event->caxis.axis == SDL_CONTROLLER_AXIS_RIGHTX, value);
+                    sc_handle_touchmap_joystick(im, 1, value, event->caxis.axis == SDL_CONTROLLER_AXIS_RIGHTX);
                     break;
                 case SDL_CONTROLLER_AXIS_TRIGGERLEFT:
                 case SDL_CONTROLLER_AXIS_TRIGGERRIGHT:

@@ -33,6 +33,7 @@ struct sc_gptm_touch_button {
 };
 
 struct sc_gptm_gamepad_touchmap {
+    struct sc_point joystick[2];
     struct sc_gptm_walk_control walk;
     int button_cnt;
     struct sc_gptm_touch_button buttons[0];
