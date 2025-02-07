@@ -429,17 +429,23 @@ static int open_file_dialog_thread(void *data) {
     return 0;
 }
 
-static void
-open_touchmap_file(struct sc_input_manager *im) {
-    assert(im->controller);
-
-    SDL_Thread *thread = SDL_CreateThread(open_file_dialog_thread, "FileDialogThread", im);
+static void sc_start_thread(const char * name, SDL_ThreadFunction fn, void *data) {
+    SDL_Thread *thread = SDL_CreateThread(fn, name, data);
     if (!thread) {
         LOGE("Failed to create thread: %s", SDL_GetError());
     } else {
         SDL_DetachThread(thread);
     }
 }
+
+static void
+open_touchmap_file(struct sc_input_manager *im) {
+    assert(im->controller);
+
+    sc_start_thread("FileDialogThread", open_file_dialog_thread, im);
+}
+
+
 
 static void
 sc_input_manager_process_key(struct sc_input_manager *im,
@@ -1108,6 +1114,25 @@ sc_handle_skill_button_direction(struct sc_input_manager *im, struct sc_gptm_tou
     simulate_virtual_touch(im, touch_btn->finger_id, AMOTION_EVENT_ACTION_MOVE, touch_btn->current_pos);
 }
 
+struct delayed_skill_ctx {
+    Uint32 delay;
+    struct sc_input_manager *im;
+    struct sc_gptm_touch_button * button;
+    struct sc_point pos;
+} ;
+
+static int delay_skill_event_thread(void *data) {
+    struct delayed_skill_ctx *ctx = (struct delayed_skill_ctx *)data;
+
+    SDL_Delay(ctx->delay);
+    
+    sc_handle_skill_button_direction(ctx->im, ctx->button, ctx->pos);
+
+    SDL_free(data);
+
+    return 0;
+}
+
 static void 
 sc_handle_touchmap_button(struct sc_input_manager *im, uint8_t button, uint8_t state) {
     struct sc_gptm_gamepad_touchmap * map = im->game_touchmap;
@@ -1133,7 +1158,15 @@ sc_handle_touchmap_button(struct sc_input_manager *im, uint8_t button, uint8_t s
                 distance = delta_x * delta_x + delta_y * delta_y;
 
                 if (distance >= SC_GPTM_WALK_CONTROL_DEADZONE) {
-                    sc_handle_skill_button_direction(im, touch_btn, joystick);
+                    struct delayed_skill_ctx * ctx = SDL_malloc(sizeof(struct delayed_skill_ctx));
+                    if (ctx != NULL) {
+                        ctx->delay = 5;
+                        ctx->im = im;
+                        ctx->button = touch_btn;
+                        ctx->pos = joystick;
+
+                        sc_start_thread("DelaySkill", delay_skill_event_thread, ctx);                    
+                    }
                 }
             } else {
                 touch_btn->current_pos = touch_btn->center;
