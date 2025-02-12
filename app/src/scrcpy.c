@@ -373,9 +373,21 @@ init_sdl_gamepads(void) {
             event.cdevice.type = SDL_CONTROLLERDEVICEADDED;
             event.cdevice.which = i;
             SDL_PushEvent(&event);
+            LOGD("Push gamepad Added event for gamepad %d", i);
         }
     }
 }
+
+static void
+    null_process_gamepad_device(struct sc_gamepad_processor *gp,
+                             const struct sc_gamepad_device_event *event) {}
+static void
+    null_process_gamepad_axis(struct sc_gamepad_processor *gp,
+                            const struct sc_gamepad_axis_event *event){}
+
+static void
+    null_process_gamepad_button(struct sc_gamepad_processor *gp,
+                              const struct sc_gamepad_button_event *event){}
 
 enum scrcpy_exit_code
 scrcpy(struct scrcpy_options *options) {
@@ -536,6 +548,7 @@ scrcpy(struct scrcpy_options *options) {
             LOGE("Could not initialize SDL gamepad: %s", SDL_GetError());
             goto end;
         }
+        LOGD("Init SDL gamepad successfully");
     }
 
     sdl_configure(options->video_playback, options->disable_screensaver);
@@ -779,6 +792,16 @@ aoa_complete:
         if (options->gamepad_input_mode == SC_GAMEPAD_INPUT_MODE_UHID) {
             sc_gamepad_uhid_init(&s->gamepad_uhid, &s->controller);
             gp = &s->gamepad_uhid.gamepad_processor;
+        } else if(options->gamepad_input_mode == SC_GAMEPAD_INPUT_MODE_LOCAL) {
+            static const struct sc_gamepad_processor_ops ops = {
+                .process_gamepad_added = null_process_gamepad_device,
+                .process_gamepad_removed = null_process_gamepad_device,
+                .process_gamepad_axis = null_process_gamepad_axis,
+                .process_gamepad_button = null_process_gamepad_button,
+            };
+            static struct sc_gamepad_processor gamepad_processor;
+            gamepad_processor.ops = &ops;
+            gp = &gamepad_processor;
         }
 
         struct sc_uhid_devices *uhid_devices = NULL;
@@ -811,6 +834,7 @@ aoa_complete:
             .gp = gp,
             .mouse_bindings = options->mouse_bindings,
             .touchmap_file = options->touchmap_file,
+            .gamepad_input_mode = options->gamepad_input_mode,
             .legacy_paste = options->legacy_paste,
             .clipboard_autosync = options->clipboard_autosync,
             .shortcut_mods = options->shortcut_mods,

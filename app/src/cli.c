@@ -443,12 +443,17 @@ static const struct sc_option options[] = {
         .text = "Same as --gamepad=uhid, or --gamepad=aoa if --otg is set.",
     },
     {
+        .shortopt = 'g',
+        .text = "Same as --gamepad=local",
+    },
+    {
         .longopt_id = OPT_GAMEPAD,
         .longopt = "gamepad",
         .argdesc = "mode",
         .text = "Select how to send gamepad inputs to the device.\n"
-                "Possible values are \"disabled\", \"uhid\" and \"aoa\".\n"
+                "Possible values are \"disabled\", \"local\", \"uhid\" and \"aoa\".\n"
                 "\"disabled\" does not send gamepad inputs to the device.\n"
+                "\"local\" does not send gamepad inputs to the device but will handle it for touch map.\n"
                 "\"uhid\" simulates physical HID gamepads using the Linux UHID "
                 "kernel module on the device.\n"
                 "\"aoa\" simulates physical gamepads using the AOAv2 protocol."
@@ -2226,6 +2231,12 @@ parse_gamepad(const char *optarg, enum sc_gamepad_input_mode *mode) {
         return true;
     }
 
+
+    if (!strcmp(optarg, "local")) {
+        *mode = SC_GAMEPAD_INPUT_MODE_LOCAL;
+        return true;
+    }
+
     if (!strcmp(optarg, "uhid")) {
         *mode = SC_GAMEPAD_INPUT_MODE_UHID;
         return true;
@@ -2806,6 +2817,9 @@ parse_args_with_getopt(struct scrcpy_cli_args *args, int argc, char *argv[],
                 break;
             case 'G':
                 opts->gamepad_input_mode = SC_GAMEPAD_INPUT_MODE_UHID_OR_AOA;
+                break;
+            case 'g':
+                opts->gamepad_input_mode = SC_GAMEPAD_INPUT_MODE_LOCAL;
                 break;
             case OPT_GAMEPAD:
                 if (!parse_gamepad(optarg, &opts->gamepad_input_mode)) {

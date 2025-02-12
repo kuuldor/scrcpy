@@ -173,6 +173,7 @@ enum sc_gamepad_input_mode {
     SC_GAMEPAD_INPUT_MODE_UHID_OR_AOA, // normal vs otg mode
     SC_GAMEPAD_INPUT_MODE_UHID,
     SC_GAMEPAD_INPUT_MODE_AOA,
+    SC_GAMEPAD_INPUT_MODE_LOCAL,
 };
 
 enum sc_mouse_binding {

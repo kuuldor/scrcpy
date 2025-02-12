@@ -81,6 +81,7 @@ struct sc_screen_params {
     struct sc_gamepad_processor *gp;
 
     struct sc_mouse_bindings mouse_bindings;
+    enum sc_gamepad_input_mode gamepad_input_mode;
     const char * touchmap_file;
     bool legacy_paste;
     bool clipboard_autosync;

@@ -35,6 +35,7 @@ sc_input_manager_init(struct sc_input_manager *im,
 
     im->mouse_bindings = params->mouse_bindings;
     im->touchmap_file = params->touchmap_file;
+    im->gamepad_input_mode = params->gamepad_input_mode;
     im->legacy_paste = params->legacy_paste;
     im->clipboard_autosync = params->clipboard_autosync;
 
@@ -1007,6 +1008,7 @@ sc_input_manager_process_mouse_wheel(struct sc_input_manager *im,
 static void
 sc_input_manager_process_gamepad_device(struct sc_input_manager *im,
                                        const SDL_ControllerDeviceEvent *event) {
+
     if (event->type == SDL_CONTROLLERDEVICEADDED) {
         SDL_GameController *gc = SDL_GameControllerOpen(event->which);
         if (!gc) {
@@ -1021,10 +1023,14 @@ sc_input_manager_process_gamepad_device(struct sc_input_manager *im,
             return;
         }
 
-        struct sc_gamepad_device_event evt = {
-            .gamepad_id = SDL_JoystickInstanceID(joystick),
-        };
-        im->gp->ops->process_gamepad_added(im->gp, &evt);
+        if (im->gamepad_input_mode != SC_GAMEPAD_INPUT_MODE_LOCAL) {
+            struct sc_gamepad_device_event evt = {
+                .gamepad_id = SDL_JoystickInstanceID(joystick),
+            };
+            im->gp->ops->process_gamepad_added(im->gp, &evt);
+        } else {
+            LOGD("Local gamepad. Do not send event to server");
+        }
     } else if (event->type == SDL_CONTROLLERDEVICEREMOVED) {
         SDL_JoystickID id = event->which;
 
@@ -1035,10 +1041,14 @@ sc_input_manager_process_gamepad_device(struct sc_input_manager *im,
             LOGW("Unknown gamepad device removed");
         }
 
-        struct sc_gamepad_device_event evt = {
-            .gamepad_id = id,
-        };
-        im->gp->ops->process_gamepad_removed(im->gp, &evt);
+        if (im->gamepad_input_mode != SC_GAMEPAD_INPUT_MODE_LOCAL) {
+            struct sc_gamepad_device_event evt = {
+                .gamepad_id = id,
+            };
+            im->gp->ops->process_gamepad_removed(im->gp, &evt);
+        } else {
+            LOGD("Local gamepad. Do not send event to server");
+        }
     } else {
         // Nothing to do
         return;
