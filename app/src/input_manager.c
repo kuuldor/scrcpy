@@ -1321,7 +1321,12 @@ sc_input_manager_handle_event(struct sc_input_manager *im,
                     break;
                 case SDL_CONTROLLER_AXIS_TRIGGERLEFT:
                 case SDL_CONTROLLER_AXIS_TRIGGERRIGHT:
-                    sc_handle_touchmap_button(im, SDL_CONTROLLER_BUTTON_MAX+event->caxis.axis, value * 5 / SDL_MAX_SINT16);
+                    if (value > SDL_MAX_SINT16 / 2) {
+                        sc_handle_touchmap_button(im, SDL_CONTROLLER_BUTTON_MAX+event->caxis.axis, 1);
+
+                    } else if (value < SDL_MAX_SINT16 / 3) {
+                        sc_handle_touchmap_button(im, SDL_CONTROLLER_BUTTON_MAX+event->caxis.axis, 0);
+                    }
                     break;
                 }
             }            
