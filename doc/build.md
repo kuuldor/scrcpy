@@ -84,6 +84,18 @@ sudo dnf install java-devel
 ```
 
 
+#### Arch
+
+```bash
+# client build dependencies
+sudo pacman -S --needed base-devel git meson ninja pkgconf sdl2 ffmpeg libusb android-tools
+
+
+# server build dependencies
+sudo pacman -S --needed jdk-openjdk
+```
+
+
 
 ### Windows
 
