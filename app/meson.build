@@ -34,6 +34,7 @@ src = [
     'src/screen.c',
     'src/server.c',
     'src/touchmap.c',
+    'src/touchmap_overlay.c',
     'src/version.c',
     'src/hid/hid_gamepad.c',
     'src/hid/hid_keyboard.c',
@@ -134,6 +135,8 @@ endif
 if host_machine.system() == 'windows'
     dependencies += cc.find_library('mingw32')
     dependencies += cc.find_library('ws2_32')
+else
+    dependencies += cc.find_library('m')  # For math functions (sin, sqrt, etc)
 endif
 
 check_functions = [

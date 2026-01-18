@@ -57,6 +57,9 @@ sc_input_manager_init(struct sc_input_manager *im,
         im->game_touchmap = parse_touchmap_config(im->touchmap_file);
         if (im->game_touchmap == NULL) {
             LOGE("Fail to parse touchmap file %s", im->touchmap_file);
+        } else {
+            // Set the touchmap to the display for overlay rendering
+            sc_display_set_touchmap(&im->screen->display, im->game_touchmap);
         }
     }
 }
@@ -643,6 +646,12 @@ sc_input_manager_process_key(struct sc_input_manager *im,
                         // Show OpenFileDialog to select TouchMap file
                         open_touchmap_file(im);
                     }
+                }
+                return;
+            case SDLK_e:
+                if (control && !repeat && down && im->screen) {
+                    // Toggle touchmap overlay with Ctrl+E
+                    sc_display_toggle_overlay(&im->screen->display);
                 }
                 return;                
         }
@@ -1362,6 +1371,10 @@ sc_input_manager_handle_event(struct sc_input_manager *im,
             im->game_touchmap = parse_touchmap_config(file_name);
             if (im->game_touchmap == NULL) {
                 LOGE("Fail to parse touchmap file %s", file_name);
+                sc_display_set_touchmap(&im->screen->display, NULL);
+            } else {
+                // Set the touchmap to the display for overlay rendering
+                sc_display_set_touchmap(&im->screen->display, im->game_touchmap);
             }
             SDL_free((void*)file_name);
             break;

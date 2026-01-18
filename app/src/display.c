@@ -5,6 +5,7 @@
 #include <string.h>
 #include <libavutil/pixfmt.h>
 
+#include "touchmap_overlay.h"
 #include "util/log.h"
 
 static bool
@@ -96,9 +97,16 @@ sc_display_init(struct sc_display *display, SDL_Window *window,
     display->pending.frame = NULL;
     display->has_frame = false;
 
+    // Initialize overlay
+    display->touchmap = NULL;
+    bool ok = sc_touchmap_overlay_init(&display->overlay, display->renderer);
+    if (!ok) {
+        LOGW("Could not initialize touchmap overlay");
+    }
+
     if (icon_novideo) {
         // Without video, set a static scrcpy icon as window content
-        bool ok = sc_display_init_novideo_icon(display, icon_novideo);
+        ok = sc_display_init_novideo_icon(display, icon_novideo);
         if (!ok) {
 #ifdef SC_DISPLAY_FORCE_OPENGL_CORE_PROFILE
             SDL_GL_DeleteContext(display->gl_context);
@@ -113,6 +121,8 @@ sc_display_init(struct sc_display *display, SDL_Window *window,
 
 void
 sc_display_destroy(struct sc_display *display) {
+    sc_touchmap_overlay_destroy(&display->overlay);
+    
     if (display->pending.frame) {
         av_frame_free(&display->pending.frame);
     }
@@ -346,6 +356,24 @@ sc_display_render(struct sc_display *display, const SDL_Rect *geometry,
         }
     }
 
+    // Render the touchmap overlay on top
+    if (display->touchmap) {
+        sc_touchmap_overlay_render(&display->overlay, display->renderer,
+                                  display->touchmap, geometry, orientation);
+    }
+
     SDL_RenderPresent(display->renderer);
     return SC_DISPLAY_RESULT_OK;
 }
+
+void
+sc_display_set_touchmap(struct sc_display *display,
+                        const struct sc_gptm_gamepad_touchmap *touchmap) {
+    display->touchmap = touchmap;
+}
+
+void
+sc_display_toggle_overlay(struct sc_display *display) {
+    sc_touchmap_overlay_toggle(&display->overlay);
+}
+

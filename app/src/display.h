@@ -11,10 +11,18 @@
 #include "coords.h"
 #include "opengl.h"
 #include "options.h"
+#include "touchmap.h"
 
 #ifdef __APPLE__
 # define SC_DISPLAY_FORCE_OPENGL_CORE_PROFILE
 #endif
+
+// Touchmap overlay structure definition (to avoid circular includes)
+struct sc_touchmap_overlay {
+    SDL_Texture *overlay_texture;
+    struct sc_size last_size;
+    bool enabled;
+};
 
 struct sc_display {
     SDL_Renderer *renderer;
@@ -36,6 +44,9 @@ struct sc_display {
     } pending;
 
     bool has_frame;
+    
+    struct sc_touchmap_overlay overlay;
+    const struct sc_gptm_gamepad_touchmap *touchmap;
 };
 
 enum sc_display_result {
@@ -60,5 +71,12 @@ sc_display_update_texture(struct sc_display *display, const AVFrame *frame);
 enum sc_display_result
 sc_display_render(struct sc_display *display, const SDL_Rect *geometry,
                   enum sc_orientation orientation);
+
+void
+sc_display_set_touchmap(struct sc_display *display,
+                        const struct sc_gptm_gamepad_touchmap *touchmap);
+
+void
+sc_display_toggle_overlay(struct sc_display *display);
 
 #endif
