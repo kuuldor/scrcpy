@@ -33,7 +33,7 @@ static SDL_GameControllerButton button_name_to_value(const char *button_name) {
     if (strcmp(button_name, "PADDLE4") == 0) return SDL_CONTROLLER_BUTTON_PADDLE4;
     if (strcmp(button_name, "TOUCHPAD") == 0) return SDL_CONTROLLER_BUTTON_TOUCHPAD;
     if (strcmp(button_name, "LT") == 0 || strcmp(button_name, "L2") == 0) return SDL_CONTROLLER_BUTTON_MAX + SDL_CONTROLLER_AXIS_TRIGGERLEFT;
-    if (strcmp(button_name, "RT") == 0 || strcmp(button_name, "L2") == 0) return SDL_CONTROLLER_BUTTON_MAX + SDL_CONTROLLER_AXIS_TRIGGERRIGHT;
+    if (strcmp(button_name, "RT") == 0 || strcmp(button_name, "R2") == 0) return SDL_CONTROLLER_BUTTON_MAX + SDL_CONTROLLER_AXIS_TRIGGERRIGHT;
     return SDL_CONTROLLER_BUTTON_INVALID; // Return invalid if the name is unrecognized
 }
 
@@ -47,10 +47,10 @@ button_value_to_name(uint8_t button) {
         case SDL_CONTROLLER_BUTTON_BACK: return "BACK";
         case SDL_CONTROLLER_BUTTON_GUIDE: return "GUIDE";
         case SDL_CONTROLLER_BUTTON_START: return "START";
-        case SDL_CONTROLLER_BUTTON_LEFTSTICK: return "L3";
-        case SDL_CONTROLLER_BUTTON_RIGHTSTICK: return "R3";
-        case SDL_CONTROLLER_BUTTON_LEFTSHOULDER: return "L1";
-        case SDL_CONTROLLER_BUTTON_RIGHTSHOULDER: return "R1";
+        case SDL_CONTROLLER_BUTTON_LEFTSTICK: return "LTHUMB";
+        case SDL_CONTROLLER_BUTTON_RIGHTSTICK: return "RTHUMB";
+        case SDL_CONTROLLER_BUTTON_LEFTSHOULDER: return "LB";
+        case SDL_CONTROLLER_BUTTON_RIGHTSHOULDER: return "RB";
         case SDL_CONTROLLER_BUTTON_DPAD_UP: return "UP";
         case SDL_CONTROLLER_BUTTON_DPAD_DOWN: return "DOWN";
         case SDL_CONTROLLER_BUTTON_DPAD_LEFT: return "LEFT";
@@ -64,11 +64,11 @@ button_value_to_name(uint8_t button) {
         default:
             if (button == SDL_CONTROLLER_BUTTON_MAX
                     + SDL_CONTROLLER_AXIS_TRIGGERLEFT) {
-                return "L2";
+                return "LT";
             }
             if (button == SDL_CONTROLLER_BUTTON_MAX
                     + SDL_CONTROLLER_AXIS_TRIGGERRIGHT) {
-                return "R2";
+                return "RT";
             }
             return "UNKNOWN";
     }
