@@ -6,10 +6,11 @@
 #include "display.h"
 #include "util/log.h"
 #include "coords.h"
+#include "input_manager.h"
 
 #define OVERLAY_CIRCLE_POINTS 32
 
-static const int OVERLAY_BUTTON_RADIUS = 32;
+static const int OVERLAY_BUTTON_RADIUS = SC_TOUCHMAP_MIN_RADIUS;
 static const int OVERLAY_PRESSED_RADIUS = 10;
 static const int OVERLAY_WALK_POS_RADIUS = 5;
 static const int OVERLAY_GLYPH_SCALE_BUTTON = 1;
@@ -55,7 +56,7 @@ draw_filled_circle(SDL_Renderer *renderer, int center_x, int center_y,
  */
 static void
 draw_circle_outline(SDL_Renderer *renderer, int center_x, int center_y,
-                    int radius, uint32_t color) {
+                   int radius, uint32_t color) {
     uint8_t r, g, b, a;
     color_to_rgba(color, &r, &g, &b, &a);
 
@@ -75,6 +76,33 @@ draw_circle_outline(SDL_Renderer *renderer, int center_x, int center_y,
         SDL_RenderDrawLine(renderer, x1, y1, x2, y2);
     }
 }
+
+static void
+draw_dashed_circle_outline(SDL_Renderer *renderer, int center_x,
+                            int center_y, int radius, uint32_t color) {
+    uint8_t r, g, b, a;
+    color_to_rgba(color, &r, &g, &b, &a);
+
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer, r, g, b, a);
+
+    double angle_step = 2.0 * M_PI / OVERLAY_CIRCLE_POINTS;
+    for (int i = 0; i < OVERLAY_CIRCLE_POINTS; ++i) {
+        if (i % 2 != 0) {
+            continue;
+        }
+        double angle1 = i * angle_step;
+        double angle2 = (i + 1) * angle_step;
+
+        int x1 = center_x + (int)(radius * cos(angle1));
+        int y1 = center_y + (int)(radius * sin(angle1));
+        int x2 = center_x + (int)(radius * cos(angle2));
+        int y2 = center_y + (int)(radius * sin(angle2));
+
+        SDL_RenderDrawLine(renderer, x1, y1, x2, y2);
+    }
+}
+
 
 enum overlay_label {
     OVERLAY_LABEL_NONE,
@@ -479,10 +507,15 @@ sc_touchmap_overlay_render(struct sc_touchmap_overlay *overlay,
     if (touchmap->walk.touch_down) {
         struct sc_point walk_pos = sc_touchmap_transform_point(
             &touchmap->walk.current_pos, frame_size, content_rect, orientation);
+        int32_t walk_pos_radius = sc_touchmap_transform_radius(
+            OVERLAY_WALK_POS_RADIUS, frame_size, content_rect, orientation);
+        if (walk_pos_radius < 1) {
+            walk_pos_radius = 1;
+        }
         draw_filled_circle(renderer,
                            walk_pos.x,
                            walk_pos.y,
-                           OVERLAY_WALK_POS_RADIUS,
+                           walk_pos_radius,
                            0xFFFFFFE0); // White for current pos
 
     }
@@ -507,7 +540,7 @@ sc_touchmap_overlay_render(struct sc_touchmap_overlay *overlay,
     // Draw button mappings
     for (int i = 0; i < touchmap->button_cnt; ++i) {
         const struct sc_gptm_touch_button *btn = &touchmap->buttons[i];
-        uint32_t color = btn->is_skill ? SC_OVERLAY_SKILL_COLOR 
+        uint32_t color = btn->is_skill ? SC_OVERLAY_SKILL_COLOR
                                        : SC_OVERLAY_BUTTON_COLOR;
 
         struct sc_point btn_center = sc_touchmap_transform_point(
@@ -524,6 +557,13 @@ sc_touchmap_overlay_render(struct sc_touchmap_overlay *overlay,
         draw_circle_outline(renderer, btn_center.x, btn_center.y,
                            button_radius,
                            outline_color);
+
+        if (btn->is_skill && btn->radius > 0 && sc_touchmap_has_ctrl_modifier()) {
+            int32_t skill_radius = sc_touchmap_transform_radius(
+                btn->radius, frame_size, content_rect, orientation);
+            draw_dashed_circle_outline(renderer, btn_center.x, btn_center.y,
+                                       skill_radius, SC_OVERLAY_DASH_COLOR);
+        }
 
         // Draw button indicator if touched
         if (btn->touch_down) {

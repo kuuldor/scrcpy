@@ -15,6 +15,20 @@
 #include "trait/key_processor.h"
 #include "trait/mouse_processor.h"
 
+enum sc_touchmap_drag_target {
+    SC_TOUCHMAP_DRAG_NONE,
+    SC_TOUCHMAP_DRAG_WALK_CENTER,
+    SC_TOUCHMAP_DRAG_WALK_RADIUS,
+    SC_TOUCHMAP_DRAG_BUTTON_CENTER,
+    SC_TOUCHMAP_DRAG_BUTTON_RADIUS,
+};
+
+struct sc_touchmap_drag_state {
+    bool active;
+    enum sc_touchmap_drag_target target;
+    int button_index;
+};
+
 struct sc_input_manager {
     struct sc_controller *controller;
     struct sc_file_pusher *fp;
@@ -26,6 +40,7 @@ struct sc_input_manager {
     struct sc_gptm_gamepad_touchmap *game_touchmap;
     enum sc_gamepad_input_mode gamepad_input_mode;
     const char *touchmap_file;
+    struct sc_touchmap_drag_state touchmap_drag;
 
     struct sc_mouse_bindings mouse_bindings;
     bool legacy_paste;
@@ -72,6 +87,10 @@ sc_input_manager_init(struct sc_input_manager *im,
                       const struct sc_input_manager_params *params);
 
 void sc_input_manager_handle_event(struct sc_input_manager *im,
-                                   const SDL_Event *event);
+                                    const SDL_Event *event);
+
+bool sc_touchmap_drag_is_active(const struct sc_input_manager *im);
+bool sc_touchmap_has_ctrl_modifier(void);
+
 
 #endif

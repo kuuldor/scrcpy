@@ -37,6 +37,43 @@ static SDL_GameControllerButton button_name_to_value(const char *button_name) {
     return SDL_CONTROLLER_BUTTON_INVALID; // Return invalid if the name is unrecognized
 }
 
+static const char *
+button_value_to_name(uint8_t button) {
+    switch (button) {
+        case SDL_CONTROLLER_BUTTON_A: return "A";
+        case SDL_CONTROLLER_BUTTON_B: return "B";
+        case SDL_CONTROLLER_BUTTON_X: return "X";
+        case SDL_CONTROLLER_BUTTON_Y: return "Y";
+        case SDL_CONTROLLER_BUTTON_BACK: return "BACK";
+        case SDL_CONTROLLER_BUTTON_GUIDE: return "GUIDE";
+        case SDL_CONTROLLER_BUTTON_START: return "START";
+        case SDL_CONTROLLER_BUTTON_LEFTSTICK: return "L3";
+        case SDL_CONTROLLER_BUTTON_RIGHTSTICK: return "R3";
+        case SDL_CONTROLLER_BUTTON_LEFTSHOULDER: return "L1";
+        case SDL_CONTROLLER_BUTTON_RIGHTSHOULDER: return "R1";
+        case SDL_CONTROLLER_BUTTON_DPAD_UP: return "UP";
+        case SDL_CONTROLLER_BUTTON_DPAD_DOWN: return "DOWN";
+        case SDL_CONTROLLER_BUTTON_DPAD_LEFT: return "LEFT";
+        case SDL_CONTROLLER_BUTTON_DPAD_RIGHT: return "RIGHT";
+        case SDL_CONTROLLER_BUTTON_MISC1: return "MISC";
+        case SDL_CONTROLLER_BUTTON_PADDLE1: return "PADDLE1";
+        case SDL_CONTROLLER_BUTTON_PADDLE2: return "PADDLE2";
+        case SDL_CONTROLLER_BUTTON_PADDLE3: return "PADDLE3";
+        case SDL_CONTROLLER_BUTTON_PADDLE4: return "PADDLE4";
+        case SDL_CONTROLLER_BUTTON_TOUCHPAD: return "TOUCHPAD";
+        default:
+            if (button == SDL_CONTROLLER_BUTTON_MAX
+                    + SDL_CONTROLLER_AXIS_TRIGGERLEFT) {
+                return "L2";
+            }
+            if (button == SDL_CONTROLLER_BUTTON_MAX
+                    + SDL_CONTROLLER_AXIS_TRIGGERRIGHT) {
+                return "R2";
+            }
+            return "UNKNOWN";
+    }
+}
+
 
 
 int sc_gptm_compare_btn(const void *a, const void *b) {
@@ -182,5 +219,71 @@ struct sc_gptm_gamepad_touchmap * parse_touchmap_config(const char *filename) {
     free(json_string);
 
     return map;
+}
+
+bool
+save_touchmap_config(const char *filename,
+                     const struct sc_gptm_gamepad_touchmap *map) {
+    if (!filename || !map) {
+        LOGE("No touchmap to save");
+        return false;
+    }
+
+    cJSON *root = cJSON_CreateObject();
+    cJSON *mappings = cJSON_AddObjectToObject(root, "mappings");
+
+    cJSON *walk_control = cJSON_AddObjectToObject(mappings, "walk_control");
+    cJSON *walk_center = cJSON_AddObjectToObject(walk_control, "center");
+    cJSON_AddNumberToObject(walk_center, "x", map->walk.center.x);
+    cJSON_AddNumberToObject(walk_center, "y", map->walk.center.y);
+    cJSON_AddNumberToObject(walk_control, "radius", map->walk.radius);
+
+    cJSON *buttons = cJSON_AddArrayToObject(mappings, "button_mappings");
+    cJSON *skills = cJSON_AddArrayToObject(mappings, "skill_casting");
+
+    for (int i = 0; i < map->button_cnt; ++i) {
+        const struct sc_gptm_touch_button *btn = &map->buttons[i];
+        const char *btn_name = button_value_to_name(btn->button);
+        cJSON *entry = NULL;
+
+        if (btn->is_skill) {
+            entry = cJSON_CreateObject();
+            cJSON_AddStringToObject(entry, "button", btn_name);
+            cJSON *center = cJSON_AddObjectToObject(entry, "center");
+            cJSON_AddNumberToObject(center, "x", btn->center.x);
+            cJSON_AddNumberToObject(center, "y", btn->center.y);
+            cJSON_AddNumberToObject(entry, "radius", btn->radius);
+            cJSON_AddItemToArray(skills, entry);
+        } else {
+            entry = cJSON_CreateObject();
+            cJSON *touch = cJSON_AddObjectToObject(entry, "touch");
+            cJSON_AddNumberToObject(touch, "x", btn->center.x);
+            cJSON_AddNumberToObject(touch, "y", btn->center.y);
+            cJSON_AddStringToObject(entry, "button", btn_name);
+            cJSON_AddItemToArray(buttons, entry);
+        }
+    }
+
+    char *json_string = cJSON_Print(root);
+    if (!json_string) {
+        cJSON_Delete(root);
+        LOGE("Failed to serialize touchmap");
+        return false;
+    }
+
+    FILE *file = fopen(filename, "w");
+    if (!file) {
+        LOGE("Failed to open file for writing: %s", filename);
+        cJSON_free(json_string);
+        cJSON_Delete(root);
+        return false;
+    }
+
+    fwrite(json_string, 1, strlen(json_string), file);
+    fclose(file);
+
+    cJSON_free(json_string);
+    cJSON_Delete(root);
+    return true;
 }
 

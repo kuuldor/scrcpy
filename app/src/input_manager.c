@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <SDL2/SDL.h>
+#include <math.h>
+#include <SDL2/SDL_keycode.h>
 
 #include "android/input.h"
 #include "android/keycodes.h"
@@ -13,8 +15,12 @@
 #include "util/log.h"
 
 #include "touchmap.h"
+#include "touchmap_overlay.h"
 #include "third_party/tfd/tinyfiledialogs.h"
 #include "events.h"
+
+static void sc_touchmap_drag_reset(struct sc_input_manager *im);
+static int save_touchmap_dialog_thread(void *data);
 
 void
 sc_input_manager_init(struct sc_input_manager *im,
@@ -34,8 +40,10 @@ sc_input_manager_init(struct sc_input_manager *im,
     im->gp = params->gp;
 
     im->mouse_bindings = params->mouse_bindings;
-    im->touchmap_file = params->touchmap_file;
+    im->touchmap_file = params->touchmap_file ? SDL_strdup(params->touchmap_file)
+                                               : NULL;
     im->gamepad_input_mode = params->gamepad_input_mode;
+    sc_touchmap_drag_reset(im);
     im->legacy_paste = params->legacy_paste;
     im->clipboard_autosync = params->clipboard_autosync;
 
@@ -398,13 +406,179 @@ free_up_touchmap(struct sc_input_manager *im) {
         free(im->game_touchmap);
         im->game_touchmap = NULL;
     }
+    if (im->touchmap_file) {
+        SDL_free((void *) im->touchmap_file);
+        im->touchmap_file = NULL;
+    }
+}
+
+bool
+sc_touchmap_drag_is_active(const struct sc_input_manager *im) {
+    return im->touchmap_drag.active;
+}
+
+static void
+sc_touchmap_drag_reset(struct sc_input_manager *im) {
+    im->touchmap_drag.active = false;
+    im->touchmap_drag.target = SC_TOUCHMAP_DRAG_NONE;
+    im->touchmap_drag.button_index = -1;
+}
+
+bool
+sc_touchmap_has_ctrl_modifier(void) {
+    return SDL_GetModState() & KMOD_CTRL;
+}
+
+static void
+sc_touchmap_drag_start(struct sc_input_manager *im,
+                       enum sc_touchmap_drag_target target,
+                       int button_index) {
+    im->touchmap_drag.active = true;
+    im->touchmap_drag.target = target;
+    im->touchmap_drag.button_index = button_index;
+}
+
+static int32_t
+sc_touchmap_min_radius(void) {
+    return SC_TOUCHMAP_MIN_RADIUS;
+}
+
+static void
+sc_touchmap_apply_center_drag(struct sc_input_manager *im,
+                              struct sc_point point) {
+    if (!im->game_touchmap) {
+        return;
+    }
+
+    switch (im->touchmap_drag.target) {
+        case SC_TOUCHMAP_DRAG_WALK_CENTER:
+            im->game_touchmap->walk.center = point;
+            im->game_touchmap->walk.current_pos = point;
+            break;
+        case SC_TOUCHMAP_DRAG_BUTTON_CENTER:
+            if (im->touchmap_drag.button_index >= 0) {
+                struct sc_gptm_touch_button *btn =
+                    &im->game_touchmap->buttons[im->touchmap_drag.button_index];
+                btn->center = point;
+                btn->current_pos = point;
+            }
+            break;
+        default:
+            break;
+    }
+}
+
+static void
+sc_touchmap_apply_radius_drag(struct sc_input_manager *im,
+                              struct sc_point point) {
+    if (!im->game_touchmap) {
+        return;
+    }
+
+    int32_t min_radius = sc_touchmap_min_radius();
+    switch (im->touchmap_drag.target) {
+        case SC_TOUCHMAP_DRAG_WALK_RADIUS: {
+            struct sc_point center = im->game_touchmap->walk.center;
+            int32_t dx = point.x - center.x;
+            int32_t dy = point.y - center.y;
+            int32_t radius = (int32_t) sqrt((double) dx * dx + (double) dy * dy);
+            im->game_touchmap->walk.radius = radius > min_radius ? radius
+                                                                : min_radius;
+            break;
+        }
+        case SC_TOUCHMAP_DRAG_BUTTON_RADIUS:
+            if (im->touchmap_drag.button_index >= 0) {
+                struct sc_gptm_touch_button *btn =
+                    &im->game_touchmap->buttons[im->touchmap_drag.button_index];
+                struct sc_point center = btn->center;
+                int32_t dx = point.x - center.x;
+                int32_t dy = point.y - center.y;
+                int32_t radius = (int32_t) sqrt((double) dx * dx
+                                                + (double) dy * dy);
+                btn->radius = radius > min_radius ? radius : min_radius;
+            }
+            break;
+        default:
+            break;
+    }
+}
+
+static bool
+sc_touchmap_is_skill_button(const struct sc_gptm_touch_button *btn) {
+    return btn->is_skill;
+}
+
+static bool
+sc_touchmap_hit_test_radius(const struct sc_point *center, int32_t radius,
+                            struct sc_point point, int32_t threshold) {
+    int32_t dx = point.x - center->x;
+    int32_t dy = point.y - center->y;
+    int32_t dist = (int32_t) sqrt((double) dx * dx + (double) dy * dy);
+    return abs(dist - radius) <= threshold;
+}
+
+static bool
+sc_touchmap_hit_test_center(const struct sc_point *center, int32_t radius,
+                            struct sc_point point) {
+    int32_t dx = point.x - center->x;
+    int32_t dy = point.y - center->y;
+    int32_t dist2 = dx * dx + dy * dy;
+    return dist2 <= radius * radius;
+}
+
+static bool
+sc_touchmap_try_start_drag(struct sc_input_manager *im, struct sc_point point) {
+    if (!im->game_touchmap) {
+        return false;
+    }
+
+    int32_t min_radius = sc_touchmap_min_radius();
+    int32_t radius_threshold = min_radius / 4;
+
+    if (sc_touchmap_hit_test_radius(&im->game_touchmap->walk.center,
+                                    im->game_touchmap->walk.radius,
+                                    point, radius_threshold)) {
+        sc_touchmap_drag_start(im, SC_TOUCHMAP_DRAG_WALK_RADIUS, -1);
+        return true;
+    }
+
+    if (sc_touchmap_hit_test_center(&im->game_touchmap->walk.center,
+                                    min_radius, point)) {
+        sc_touchmap_drag_start(im, SC_TOUCHMAP_DRAG_WALK_CENTER, -1);
+        return true;
+    }
+
+    for (int i = 0; i < im->game_touchmap->button_cnt; ++i) {
+        struct sc_gptm_touch_button *btn = &im->game_touchmap->buttons[i];
+        int32_t radius = btn->radius > 0 ? btn->radius : min_radius;
+
+        if (sc_touchmap_is_skill_button(btn)
+                && sc_touchmap_hit_test_radius(&btn->center, radius, point,
+                                               radius_threshold)) {
+            sc_touchmap_drag_start(im, SC_TOUCHMAP_DRAG_BUTTON_RADIUS, i);
+            return true;
+        }
+
+        if (sc_touchmap_hit_test_center(&btn->center, min_radius, point)) {
+            sc_touchmap_drag_start(im, SC_TOUCHMAP_DRAG_BUTTON_CENTER, i);
+            return true;
+        }
+
+        if (sc_touchmap_hit_test_radius(&btn->center, radius, point,
+                                        radius_threshold)) {
+            sc_touchmap_drag_start(im, SC_TOUCHMAP_DRAG_BUTTON_RADIUS, i);
+            return true;
+        }
+    }
+
+    return false;
 }
 
 static int open_file_dialog_thread(void *data) {
     struct sc_input_manager *im = (struct sc_input_manager *)data;
     (void)im;
 
-    char const * lFilterPatterns[2]={"*.json", "*.*"};
+    char const * lFilterPatterns[2] = {"*.json", "*.*"};
     char * file_name = tinyfd_openFileDialog(
         "Open Touch Map File",
         "",
@@ -419,12 +593,42 @@ static int open_file_dialog_thread(void *data) {
         return 1;
     }
 
-    LOGI("Selected file: %s", file_name);    
+    LOGI("Selected file: %s", file_name);
 
     // Send custom event to notify the main thread
     SDL_Event event;
     event.type = SC_EVENT_FILE_DIALOG;
-    
+    event.user.code = 0;
+
+    int len = SDL_strlen(file_name) + 1;
+    event.user.data1 = SDL_malloc(len);
+    SDL_strlcpy(event.user.data1, file_name, len);
+    SDL_PushEvent(&event);
+
+    return 0;
+}
+
+static int save_touchmap_dialog_thread(void *data) {
+    struct sc_input_manager *im = (struct sc_input_manager *)data;
+
+    char const * lFilterPatterns[2] = {"*.json", "*.*"};
+    char * file_name = tinyfd_saveFileDialog(
+        "Save Touch Map File",
+        im->touchmap_file ? im->touchmap_file : "",
+        2,
+        lFilterPatterns,
+        "JSON file"
+    );
+
+    if (file_name == NULL) {
+        LOGI("Save File cancelled");
+        return 1;
+    }
+
+    LOGI("Selected save file: %s", file_name);
+
+    SDL_Event event;
+    event.type = SC_EVENT_TOUCHMAP_SAVE;
     int len = SDL_strlen(file_name) + 1;
     event.user.data1 = SDL_malloc(len);
     SDL_strlcpy(event.user.data1, file_name, len);
@@ -449,6 +653,17 @@ open_touchmap_file(struct sc_input_manager *im) {
     sc_start_thread("FileDialogThread", open_file_dialog_thread, im);
 }
 
+static void
+save_touchmap_file(struct sc_input_manager *im, const char *filename) {
+    if (!filename || !im->game_touchmap) {
+        return;
+    }
+
+    if (!save_touchmap_config(filename, im->game_touchmap)) {
+        LOGE("Fail to save touchmap file %s", filename);
+    }
+}
+
 
 
 static void
@@ -462,9 +677,15 @@ sc_input_manager_process_key(struct sc_input_manager *im,
     SDL_Keycode sdl_keycode = event->keysym.sym;
     uint16_t mod = event->keysym.mod;
     bool down = event->type == SDL_KEYDOWN;
-    bool ctrl = event->keysym.mod & KMOD_CTRL;
+    bool ctrl = sc_touchmap_has_ctrl_modifier();
     bool shift = event->keysym.mod & KMOD_SHIFT;
     bool repeat = event->repeat;
+
+    if (sdl_keycode == SDLK_s && ctrl && !shift && down && !repeat
+            && im->game_touchmap) {
+        sc_start_thread("SaveTouchMap", save_touchmap_dialog_thread, im);
+        return;
+    }
 
     // Either the modifier includes a shortcut modifier, or the key
     // press/release is a modifier key.
@@ -739,6 +960,25 @@ sc_input_manager_process_mouse_motion(struct sc_input_manager *im,
         return;
     }
 
+    if (sc_touchmap_drag_is_active(im)) {
+        struct sc_point point =
+            sc_screen_convert_window_to_frame_coords(im->screen, event->x,
+                                                     event->y);
+        switch (im->touchmap_drag.target) {
+            case SC_TOUCHMAP_DRAG_WALK_CENTER:
+            case SC_TOUCHMAP_DRAG_BUTTON_CENTER:
+                sc_touchmap_apply_center_drag(im, point);
+                break;
+            case SC_TOUCHMAP_DRAG_WALK_RADIUS:
+            case SC_TOUCHMAP_DRAG_BUTTON_RADIUS:
+                sc_touchmap_apply_radius_drag(im, point);
+                break;
+            default:
+                break;
+        }
+        return;
+    }
+
     struct sc_mouse_motion_event evt = {
         .position = sc_input_manager_get_position(im, event->x, event->y),
         .pointer_id = im->vfinger_down ? SC_POINTER_ID_GENERIC_FINGER
@@ -838,7 +1078,7 @@ sc_input_manager_process_mouse_button(struct sc_input_manager *im,
     }
 
     SDL_Keymod keymod = SDL_GetModState();
-    bool ctrl_pressed = keymod & KMOD_CTRL;
+    bool ctrl_pressed = sc_touchmap_has_ctrl_modifier();
     bool shift_pressed = keymod & KMOD_SHIFT;
 
     if (control && !paused) {
@@ -912,7 +1152,27 @@ sc_input_manager_process_mouse_button(struct sc_input_manager *im,
         im->mouse_buttons_state |= button;
     }
 
+    if (!down && event->button == SDL_BUTTON_LEFT && sc_touchmap_drag_is_active(im)) {
+        sc_touchmap_drag_reset(im);
+        return;
+    }
+
+    if (sc_touchmap_drag_is_active(im)) {
+        return;
+    }
+
+    bool start_drag = false;
+    if (down && event->button == SDL_BUTTON_LEFT && ctrl_pressed) {
+        struct sc_point point = sc_screen_convert_window_to_frame_coords(
+            im->screen, event->x, event->y);
+        start_drag = sc_touchmap_try_start_drag(im, point);
+        if (start_drag) {
+            return;
+        }
+    }
+
     bool change_vfinger = event->button == SDL_BUTTON_LEFT &&
+            !start_drag &&
             ((down && !im->vfinger_down && (ctrl_pressed || shift_pressed)) ||
              (!down && im->vfinger_down));
     bool use_finger = im->vfinger_down || change_vfinger;
@@ -1368,6 +1628,8 @@ sc_input_manager_handle_event(struct sc_input_manager *im,
             LOGI("Got FILE OPEN Event with file name: %s", file_name);
 
             free_up_touchmap(im);
+            SDL_free((void *) im->touchmap_file);
+            im->touchmap_file = SDL_strdup(file_name);
             im->game_touchmap = parse_touchmap_config(file_name);
             if (im->game_touchmap == NULL) {
                 LOGE("Fail to parse touchmap file %s", file_name);
@@ -1376,6 +1638,17 @@ sc_input_manager_handle_event(struct sc_input_manager *im,
                 // Set the touchmap to the display for overlay rendering
                 sc_display_set_touchmap(&im->screen->display, im->game_touchmap);
             }
+            SDL_free((void*)file_name);
+            break;
+        }
+        case SC_EVENT_TOUCHMAP_SAVE: {
+            const char * file_name = event->user.data1;
+            if (file_name == NULL) {
+                break;
+            }
+            LOGI("Got TOUCHMAP SAVE Event with file name: %s", file_name);
+
+            save_touchmap_file(im, file_name);
             SDL_free((void*)file_name);
             break;
         }

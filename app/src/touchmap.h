@@ -40,6 +40,8 @@ struct sc_gptm_gamepad_touchmap {
 };
 
 struct sc_gptm_gamepad_touchmap * parse_touchmap_config(const char * filename);
+bool save_touchmap_config(const char * filename,
+                          const struct sc_gptm_gamepad_touchmap *map);
 int sc_gptm_compare_btn(const void *a, const void *b);
 
 #endif
