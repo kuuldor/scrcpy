@@ -8,6 +8,7 @@
 
 #include "touchmap.h"
 #include "options.h"
+#include "coords.h"
 
 // Forward declaration to avoid circular includes
 struct sc_touchmap_overlay;
@@ -45,7 +46,7 @@ sc_touchmap_overlay_destroy(struct sc_touchmap_overlay *overlay);
  * @param overlay The overlay to render
  * @param renderer The SDL renderer
  * @param touchmap The touchmap configuration (can be NULL to disable)
- * @param geometry The geometry where the content is displayed
+ * @param content_rect The geometry where the content is displayed
  * @param orientation The display orientation
  * @return true on success, false on error
  */
@@ -53,7 +54,8 @@ bool
 sc_touchmap_overlay_render(struct sc_touchmap_overlay *overlay,
                            SDL_Renderer *renderer,
                            const struct sc_gptm_gamepad_touchmap *touchmap,
-                           const SDL_Rect *geometry,
+                           const struct sc_size *frame_size,
+                           const SDL_Rect *content_rect,
                            enum sc_orientation orientation);
 
 /**

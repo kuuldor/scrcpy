@@ -368,62 +368,141 @@ sc_touchmap_overlay_destroy(struct sc_touchmap_overlay *overlay) {
     }
 }
 
+static struct sc_point
+sc_touchmap_transform_point(const struct sc_point *point,
+                            const struct sc_size *frame_size,
+                            const SDL_Rect *content_rect,
+                            enum sc_orientation orientation) {
+    struct sc_point oriented = *point;
+    int32_t fw = frame_size->width;
+    int32_t fh = frame_size->height;
+
+    switch (orientation) {
+        case SC_ORIENTATION_0:
+            break;
+        case SC_ORIENTATION_90:
+            oriented.x = fw - point->y;
+            oriented.y = point->x;
+            break;
+        case SC_ORIENTATION_180:
+            oriented.x = fw - point->x;
+            oriented.y = fh - point->y;
+            break;
+        case SC_ORIENTATION_270:
+            oriented.x = point->y;
+            oriented.y = fh - point->x;
+            break;
+        case SC_ORIENTATION_FLIP_0:
+            oriented.x = fw - point->x;
+            oriented.y = point->y;
+            break;
+        case SC_ORIENTATION_FLIP_90:
+            oriented.x = fw - point->y;
+            oriented.y = fh - point->x;
+            break;
+        case SC_ORIENTATION_FLIP_180:
+            oriented.x = point->x;
+            oriented.y = fh - point->y;
+            break;
+        default:
+            oriented.x = point->y;
+            oriented.y = point->x;
+            break;
+    }
+
+    if (sc_orientation_is_swap(orientation)) {
+        int32_t tmp = fw;
+        fw = fh;
+        fh = tmp;
+    }
+
+    struct sc_point result = {
+        .x = content_rect->x + (int64_t) oriented.x * content_rect->w / fw,
+        .y = content_rect->y + (int64_t) oriented.y * content_rect->h / fh,
+    };
+
+    return result;
+}
+
+static int32_t
+sc_touchmap_transform_radius(int32_t radius, const struct sc_size *frame_size,
+                             const SDL_Rect *content_rect,
+                             enum sc_orientation orientation) {
+    int32_t fw = frame_size->width;
+    int32_t fh = frame_size->height;
+
+    if (sc_orientation_is_swap(orientation)) {
+        int32_t tmp = fw;
+        fw = fh;
+        fh = tmp;
+    }
+
+    int32_t sx = (int64_t) radius * content_rect->w / fw;
+    int32_t sy = (int64_t) radius * content_rect->h / fh;
+    return sx < sy ? sx : sy;
+}
+
 bool
 sc_touchmap_overlay_render(struct sc_touchmap_overlay *overlay,
                            SDL_Renderer *renderer,
                            const struct sc_gptm_gamepad_touchmap *touchmap,
-                           const SDL_Rect *geometry,
+                           const struct sc_size *frame_size,
+                           const SDL_Rect *content_rect,
                            enum sc_orientation orientation) {
-    (void)orientation; // Simplified implementation doesn't handle rotation yet
-    
-    if (!overlay->enabled || !touchmap || !geometry) {
+    if (!overlay->enabled || !touchmap || !content_rect || !frame_size
+            || !frame_size->width || !frame_size->height) {
         return true;
     }
 
     // Draw walk control (outer circle)
     if (touchmap->walk.radius > 0) {
-        draw_filled_circle(renderer, 
-                          touchmap->walk.center.x,
-                          touchmap->walk.center.y,
-                          touchmap->walk.radius,
+        struct sc_point walk_center = sc_touchmap_transform_point(
+            &touchmap->walk.center, frame_size, content_rect, orientation);
+        int32_t walk_radius = sc_touchmap_transform_radius(
+            touchmap->walk.radius, frame_size, content_rect, orientation);
+
+        draw_filled_circle(renderer,
+                          walk_center.x,
+                          walk_center.y,
+                          walk_radius,
                           SC_OVERLAY_WALK_COLOR);
-        
+
         // Draw walk control outline
         draw_circle_outline(renderer,
-                           touchmap->walk.center.x,
-                           touchmap->walk.center.y,
-                           touchmap->walk.radius,
-                            0xFFFFFFB0); // White outline
-
+                           walk_center.x,
+                           walk_center.y,
+                           walk_radius,
+                           0xFFFFFFB0); // White outline
     }
 
-     // Draw current position for walk control
+    // Draw current position for walk control
     if (touchmap->walk.touch_down) {
+        struct sc_point walk_pos = sc_touchmap_transform_point(
+            &touchmap->walk.current_pos, frame_size, content_rect, orientation);
         draw_filled_circle(renderer,
-                           touchmap->walk.current_pos.x,
-                           touchmap->walk.current_pos.y,
+                           walk_pos.x,
+                           walk_pos.y,
                            OVERLAY_WALK_POS_RADIUS,
                            0xFFFFFFE0); // White for current pos
 
     }
 
     if (touchmap->walk.radius > 0) {
+        struct sc_point walk_center = sc_touchmap_transform_point(
+            &touchmap->walk.center, frame_size, content_rect, orientation);
         int walk_label_scale = OVERLAY_GLYPH_SCALE_WALK;
-        int center_x = touchmap->walk.center.x;
-        int center_y = touchmap->walk.center.y;
         int offset = (OVERLAY_GLYPH_HEIGHT + OVERLAY_GLYPH_SPACING) / 2
                      * walk_label_scale;
 
-        draw_button_label(renderer, center_x - offset, center_y,
+        draw_button_label(renderer, walk_center.x - offset, walk_center.y,
                           OVERLAY_LABEL_LEFT, walk_label_scale);
-        draw_button_label(renderer, center_x + offset, center_y,
+        draw_button_label(renderer, walk_center.x + offset, walk_center.y,
                           OVERLAY_LABEL_RIGHT, walk_label_scale);
-        draw_button_label(renderer, center_x, center_y - offset,
+        draw_button_label(renderer, walk_center.x, walk_center.y - offset,
                           OVERLAY_LABEL_UP, walk_label_scale);
-        draw_button_label(renderer, center_x, center_y + offset,
+        draw_button_label(renderer, walk_center.x, walk_center.y + offset,
                           OVERLAY_LABEL_DOWN, walk_label_scale);
     }
-
 
     // Draw button mappings
     for (int i = 0; i < touchmap->button_cnt; ++i) {
@@ -431,26 +510,31 @@ sc_touchmap_overlay_render(struct sc_touchmap_overlay *overlay,
         uint32_t color = btn->is_skill ? SC_OVERLAY_SKILL_COLOR 
                                        : SC_OVERLAY_BUTTON_COLOR;
 
+        struct sc_point btn_center = sc_touchmap_transform_point(
+            &btn->center, frame_size, content_rect, orientation);
+
         // Draw button area as filled circle with transparency
         int button_radius = OVERLAY_BUTTON_RADIUS;
-        draw_filled_circle(renderer, btn->center.x, btn->center.y,
+        draw_filled_circle(renderer, btn_center.x, btn_center.y,
                           button_radius,
                           color);
 
         // Draw outline circle (solid)
         uint32_t outline_color = btn->is_skill ? 0xFFFFFFC0 : 0xFFFFFFA0;
-        draw_circle_outline(renderer, btn->center.x, btn->center.y,
+        draw_circle_outline(renderer, btn_center.x, btn_center.y,
                            button_radius,
                            outline_color);
 
         // Draw button indicator if touched
         if (btn->touch_down) {
-            draw_filled_circle(renderer, btn->center.x, btn->center.y,
+            struct sc_point btn_pos = sc_touchmap_transform_point(
+                &btn->current_pos, frame_size, content_rect, orientation);
+            draw_filled_circle(renderer, btn_pos.x, btn_pos.y,
                               OVERLAY_PRESSED_RADIUS, outline_color);
         }
 
         enum overlay_label label = button_value_to_label(btn->button);
-        draw_button_label(renderer, btn->center.x, btn->center.y,
+        draw_button_label(renderer, btn_center.x, btn_center.y,
                           label, OVERLAY_GLYPH_SCALE_BUTTON);
     }
 

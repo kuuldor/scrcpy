@@ -96,6 +96,7 @@ sc_display_init(struct sc_display *display, SDL_Window *window,
     display->pending.flags = 0;
     display->pending.frame = NULL;
     display->has_frame = false;
+    display->frame_size = (struct sc_size) {0, 0};
 
     // Initialize overlay
     display->touchmap = NULL;
@@ -230,6 +231,8 @@ sc_display_set_texture_size_internal(struct sc_display *display,
                                      struct sc_size size) {
     assert(size.width && size.height);
 
+    display->frame_size = size;
+
     if (display->texture) {
         SDL_DestroyTexture(display->texture);
     }
@@ -323,6 +326,9 @@ sc_display_render(struct sc_display *display, const SDL_Rect *geometry,
     SDL_Renderer *renderer = display->renderer;
     SDL_Texture *texture = display->texture;
 
+    const SDL_Rect *dstrect = geometry;
+    SDL_Rect rect;
+
     if (orientation == SC_ORIENTATION_0) {
         int ret = SDL_RenderCopy(renderer, texture, NULL, geometry);
         if (ret) {
@@ -333,16 +339,12 @@ sc_display_render(struct sc_display *display, const SDL_Rect *geometry,
         unsigned cw_rotation = sc_orientation_get_rotation(orientation);
         double angle = 90 * cw_rotation;
 
-        const SDL_Rect *dstrect = NULL;
-        SDL_Rect rect;
         if (sc_orientation_is_swap(orientation)) {
             rect.x = geometry->x + (geometry->w - geometry->h) / 2;
             rect.y = geometry->y + (geometry->h - geometry->w) / 2;
             rect.w = geometry->h;
             rect.h = geometry->w;
             dstrect = &rect;
-        } else {
-            dstrect = geometry;
         }
 
         SDL_RendererFlip flip = sc_orientation_is_mirror(orientation)
@@ -359,7 +361,8 @@ sc_display_render(struct sc_display *display, const SDL_Rect *geometry,
     // Render the touchmap overlay on top
     if (display->touchmap) {
         sc_touchmap_overlay_render(&display->overlay, display->renderer,
-                                  display->touchmap, geometry, orientation);
+                                  display->touchmap, &display->frame_size,
+                                  dstrect, orientation);
     }
 
     SDL_RenderPresent(display->renderer);

@@ -44,7 +44,8 @@ struct sc_display {
     } pending;
 
     bool has_frame;
-    
+    struct sc_size frame_size;
+
     struct sc_touchmap_overlay overlay;
     const struct sc_gptm_gamepad_touchmap *touchmap;
 };
