@@ -13,10 +13,10 @@
 struct sc_touchmap_overlay;
 
 // Color constants for the overlay (RGBA)
-#define SC_OVERLAY_WALK_COLOR       0x00FF0080  // Green with transparency
-#define SC_OVERLAY_BUTTON_COLOR     0xFF000080  // Red with transparency
-#define SC_OVERLAY_SKILL_COLOR      0x0000FF80  // Blue with transparency
-#define SC_OVERLAY_TEXT_COLOR       0xFFFFFF80  // White with transparency
+#define SC_OVERLAY_WALK_COLOR       0xFFFFFF40  // White, low opacity
+#define SC_OVERLAY_BUTTON_COLOR     0x6BFF6B55  // Stronger green tint
+#define SC_OVERLAY_SKILL_COLOR      0x6B6BFF70  // Stronger blue tint
+#define SC_OVERLAY_TEXT_COLOR       0xFFFFFFB0  // White, high opacity
 
 /**
  * Initialize the touchmap overlay
