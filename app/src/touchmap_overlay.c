@@ -6,7 +6,6 @@
 #include "display.h"
 #include "util/log.h"
 #include "coords.h"
-#include "input_manager.h"
 
 #define OVERLAY_CIRCLE_POINTS 32
 
@@ -18,6 +17,9 @@ static const int OVERLAY_GLYPH_SCALE_WALK = 3;
 static const int OVERLAY_GLYPH_SPACING = -4;
 static const int OVERLAY_GLYPH_WIDTH = 24;
 static const int OVERLAY_GLYPH_HEIGHT = 24;
+static const int OVERLAY_TEXT_SPACING = -8;
+static const int OVERLAY_EDIT_PADDING = 6;
+static const int OVERLAY_EDIT_MARGIN = 8;
 
 /**
  * Helper function to extract RGBA components from a color value
@@ -185,6 +187,15 @@ enum overlay_glyph {
     OVERLAY_GLYPH_BACK,
     OVERLAY_GLYPH_START,
     OVERLAY_GLYPH_GUIDE,
+    OVERLAY_GLYPH_C,
+    OVERLAY_GLYPH_D,
+    OVERLAY_GLYPH_E,
+    OVERLAY_GLYPH_I,
+    OVERLAY_GLYPH_O,
+    OVERLAY_GLYPH_Q,
+    OVERLAY_GLYPH_S,
+    OVERLAY_GLYPH_T,
+    OVERLAY_GLYPH_U,
 };
 
 static const uint32_t overlay_glyph_data[][24] = {
@@ -284,6 +295,60 @@ static const uint32_t overlay_glyph_data[][24] = {
         0xFFFFFF, 0x0FFFF0, 0x0FFFF0, 0x0FFFF0, 0x0FC3F0, 0x0FC3F0,
         0x0FC3F0, 0x0FC3F0, 0x0FC3F0, 0x0FC3F0, 0x0FC3F0, 0x0FC3F0,
     },
+    [OVERLAY_GLYPH_C] = {
+        0x000000, 0x000000, 0x000000, 0x001F00, 0x007FC0, 0x00F0C0,
+        0x00C000, 0x01C000, 0x01C000, 0x018000, 0x018000, 0x018000,
+        0x018000, 0x018000, 0x018000, 0x01C000, 0x01C000, 0x00C000,
+        0x00F0C0, 0x007FC0, 0x001F00, 0x000000, 0x000000, 0x000000,
+    },
+    [OVERLAY_GLYPH_D] = {
+        0x000000, 0x000000, 0x000000, 0x01F800, 0x01FE00, 0x018700,
+        0x018380, 0x018180, 0x0181C0, 0x0181C0, 0x0181C0, 0x0181C0,
+        0x0181C0, 0x0181C0, 0x0181C0, 0x0181C0, 0x018180, 0x018380,
+        0x018700, 0x01FE00, 0x01F800, 0x000000, 0x000000, 0x000000,
+    },
+    [OVERLAY_GLYPH_E] = {
+        0x000000, 0x000000, 0x000000, 0x01FFC0, 0x01FFC0, 0x01C000,
+        0x01C000, 0x01C000, 0x01C000, 0x01C000, 0x01C000, 0x01FF80,
+        0x01FF80, 0x01C000, 0x01C000, 0x01C000, 0x01C000, 0x01C000,
+        0x01C000, 0x01FFC0, 0x01FFC0, 0x000000, 0x000000, 0x000000,
+    },
+    [OVERLAY_GLYPH_I] = {
+        0x000000, 0x000000, 0x000000, 0x01FF80, 0x01FF80, 0x001800,
+        0x001800, 0x001800, 0x001800, 0x001800, 0x001800, 0x001800,
+        0x001800, 0x001800, 0x001800, 0x001800, 0x001800, 0x001800,
+        0x001800, 0x01FF80, 0x01FF80, 0x000000, 0x000000, 0x000000,
+    },
+    [OVERLAY_GLYPH_O] = {
+        0x000000, 0x000000, 0x000000, 0x003E00, 0x00FF00, 0x00E380,
+        0x01C180, 0x0181C0, 0x0181C0, 0x0181C0, 0x0380C0, 0x0380C0,
+        0x0380C0, 0x0380C0, 0x0181C0, 0x0181C0, 0x0181C0, 0x01C180,
+        0x00E380, 0x00FF00, 0x003E00, 0x000000, 0x000000, 0x000000,
+    },
+    [OVERLAY_GLYPH_Q] = {
+        0x000000, 0x000000, 0x000000, 0x003E00, 0x00FF00, 0x00E380, 
+        0x01C180, 0x0181C0, 0x0181C0, 0x0181C0, 0x0380C0, 0x0380C0, 
+        0x0380C0, 0x0380C0, 0x0181C0, 0x0181C0, 0x0181C0, 0x01C180, 
+        0x00E380, 0x00FF00, 0x003E00, 0x000700, 0x000380, 0x000100, 
+    },
+    [OVERLAY_GLYPH_S] = {
+        0x000000, 0x000000, 0x000000, 0x003E00, 0x00FF80, 0x01C180,
+        0x018000, 0x018000, 0x018000, 0x01C000, 0x01F000, 0x00FE00,
+        0x003F80, 0x000780, 0x0001C0, 0x0000C0, 0x0000C0, 0x0001C0,
+        0x010380, 0x01FF00, 0x007E00, 0x000000, 0x000000, 0x000000,
+    },
+    [OVERLAY_GLYPH_T] = {
+        0x000000, 0x000000, 0x000000, 0x03FFE0, 0x03FFE0, 0x001800,
+        0x001800, 0x001800, 0x001800, 0x001800, 0x001800, 0x001800,
+        0x001800, 0x001800, 0x001800, 0x001800, 0x001800, 0x001800,
+        0x001800, 0x001800, 0x001800, 0x000000, 0x000000, 0x000000,
+    },
+    [OVERLAY_GLYPH_U] = {
+        0x000000, 0x000000, 0x000000, 0x0181C0, 0x0181C0, 0x0181C0,
+        0x0181C0, 0x0181C0, 0x0181C0, 0x0181C0, 0x0181C0, 0x0181C0,
+        0x0181C0, 0x0181C0, 0x0181C0, 0x0181C0, 0x0181C0, 0x018180,
+        0x01C380, 0x00FF00, 0x003E00, 0x000000, 0x000000, 0x000000,
+    },
 };
 
 static void
@@ -314,6 +379,97 @@ draw_glyph(SDL_Renderer *renderer, int center_x, int center_y,
                 SDL_RenderFillRect(renderer, &pixel);
             }
         }
+    }
+}
+
+static void
+draw_filled_rect(SDL_Renderer *renderer, const SDL_Rect *rect, uint32_t color) {
+    uint8_t r, g, b, a;
+    color_to_rgba(color, &r, &g, &b, &a);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer, r, g, b, a);
+    SDL_RenderFillRect(renderer, rect);
+}
+
+static void
+draw_rect_outline(SDL_Renderer *renderer, const SDL_Rect *rect,
+                  uint32_t color) {
+    uint8_t r, g, b, a;
+    color_to_rgba(color, &r, &g, &b, &a);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer, r, g, b, a);
+    SDL_RenderDrawRect(renderer, rect);
+}
+
+static int
+overlay_text_width(int count, int scale) {
+    if (count <= 0) {
+        return 0;
+    }
+    return count * OVERLAY_GLYPH_WIDTH * scale
+           + (count - 1) * OVERLAY_TEXT_SPACING * scale;
+}
+
+static void
+draw_glyph_word(SDL_Renderer *renderer, int center_x, int center_y,
+                const enum overlay_glyph *glyphs, int count, int scale) {
+    if (count <= 0) {
+        return;
+    }
+
+    int step = OVERLAY_GLYPH_WIDTH * scale + OVERLAY_TEXT_SPACING * scale;
+    int total_width = overlay_text_width(count, scale);
+    int start_x = center_x - total_width / 2 + OVERLAY_GLYPH_WIDTH * scale / 2;
+
+    for (int i = 0; i < count; ++i) {
+        draw_glyph(renderer, start_x + i * step, center_y, glyphs[i], scale);
+    }
+}
+
+SDL_Rect
+sc_touchmap_overlay_get_edit_button_rect(const SDL_Rect *content_rect,
+                                         bool edit_mode) {
+    int scale = OVERLAY_GLYPH_SCALE_BUTTON;
+    int label_len = 4;
+    int text_width = overlay_text_width(label_len, scale);
+    int width = text_width + 2 * OVERLAY_EDIT_PADDING;
+    int height = OVERLAY_GLYPH_HEIGHT * scale + 2 * OVERLAY_EDIT_PADDING;
+    SDL_Rect rect = {
+        .x = content_rect->x + content_rect->w - width - OVERLAY_EDIT_MARGIN,
+        .y = content_rect->y + OVERLAY_EDIT_MARGIN,
+        .w = width,
+        .h = height,
+    };
+    return rect;
+}
+
+static void
+draw_edit_button(SDL_Renderer *renderer, const SDL_Rect *rect,
+                 bool edit_mode) {
+    static const enum overlay_glyph edit_label[] = {
+        OVERLAY_GLYPH_E, OVERLAY_GLYPH_D, OVERLAY_GLYPH_I, OVERLAY_GLYPH_T,
+    };
+    static const enum overlay_glyph close_label[] = {
+        OVERLAY_GLYPH_Q, OVERLAY_GLYPH_U, OVERLAY_GLYPH_I, OVERLAY_GLYPH_T,
+    };
+
+    uint32_t bg = edit_mode ? SC_OVERLAY_EDIT_BG_ACTIVE
+                            : SC_OVERLAY_EDIT_BG_COLOR;
+    draw_filled_rect(renderer, rect, bg);
+    draw_rect_outline(renderer, rect, SC_OVERLAY_EDIT_BORDER);
+
+    int center_x = rect->x + rect->w / 2;
+    int center_y = rect->y + rect->h / 2;
+    if (edit_mode) {
+        draw_glyph_word(renderer, center_x, center_y,
+                        close_label, (int) (sizeof(close_label)
+                                            / sizeof(close_label[0])),
+                        OVERLAY_GLYPH_SCALE_BUTTON);
+    } else {
+        draw_glyph_word(renderer, center_x, center_y,
+                        edit_label, (int) (sizeof(edit_label)
+                                           / sizeof(edit_label[0])),
+                        OVERLAY_GLYPH_SCALE_BUTTON);
     }
 }
 
@@ -385,6 +541,7 @@ sc_touchmap_overlay_init(struct sc_touchmap_overlay *overlay,
     overlay->last_size.width = 0;
     overlay->last_size.height = 0;
     overlay->enabled = false;
+    overlay->edit_mode = false;
     return true;
 }
 
@@ -558,7 +715,7 @@ sc_touchmap_overlay_render(struct sc_touchmap_overlay *overlay,
                            button_radius,
                            outline_color);
 
-        if (btn->is_skill && btn->radius > 0 && sc_touchmap_has_ctrl_modifier()) {
+        if (btn->is_skill && btn->radius > 0 && overlay->edit_mode) {
             int32_t skill_radius = sc_touchmap_transform_radius(
                 btn->radius, frame_size, content_rect, orientation);
             draw_dashed_circle_outline(renderer, btn_center.x, btn_center.y,
@@ -578,6 +735,10 @@ sc_touchmap_overlay_render(struct sc_touchmap_overlay *overlay,
                           label, OVERLAY_GLYPH_SCALE_BUTTON);
     }
 
+    SDL_Rect edit_rect = sc_touchmap_overlay_get_edit_button_rect(content_rect,
+                                                                  overlay->edit_mode);
+    draw_edit_button(renderer, &edit_rect, overlay->edit_mode);
+
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
     return true;
 }
@@ -585,6 +746,9 @@ sc_touchmap_overlay_render(struct sc_touchmap_overlay *overlay,
 void
 sc_touchmap_overlay_toggle(struct sc_touchmap_overlay *overlay) {
     overlay->enabled = !overlay->enabled;
+    if (!overlay->enabled) {
+        overlay->edit_mode = false;
+    }
     LOGI("Touchmap overlay %s", overlay->enabled ? "enabled" : "disabled");
 }
 
@@ -592,9 +756,23 @@ void
 sc_touchmap_overlay_set_enabled(struct sc_touchmap_overlay *overlay,
                                 bool enabled) {
     overlay->enabled = enabled;
+    if (!enabled) {
+        overlay->edit_mode = false;
+    }
 }
 
 bool
 sc_touchmap_overlay_is_enabled(const struct sc_touchmap_overlay *overlay) {
     return overlay->enabled;
+}
+
+void
+sc_touchmap_overlay_set_edit_mode(struct sc_touchmap_overlay *overlay,
+                                  bool edit_mode) {
+    overlay->edit_mode = edit_mode;
+}
+
+bool
+sc_touchmap_overlay_is_edit_mode(const struct sc_touchmap_overlay *overlay) {
+    return overlay->edit_mode;
 }

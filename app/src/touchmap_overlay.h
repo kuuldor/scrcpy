@@ -21,6 +21,9 @@ struct sc_touchmap_overlay;
 #define SC_TOUCHMAP_MIN_RADIUS      32
 
 #define SC_OVERLAY_DASH_COLOR       0xFFFFFFD0
+#define SC_OVERLAY_EDIT_BG_COLOR    0x00000080
+#define SC_OVERLAY_EDIT_BG_ACTIVE   0x000000B0
+#define SC_OVERLAY_EDIT_BORDER      0xFFFFFFB0
 
 /**
  * Initialize the touchmap overlay
@@ -87,5 +90,16 @@ sc_touchmap_overlay_set_enabled(struct sc_touchmap_overlay *overlay,
  */
 bool
 sc_touchmap_overlay_is_enabled(const struct sc_touchmap_overlay *overlay);
+
+void
+sc_touchmap_overlay_set_edit_mode(struct sc_touchmap_overlay *overlay,
+                                  bool edit_mode);
+
+bool
+sc_touchmap_overlay_is_edit_mode(const struct sc_touchmap_overlay *overlay);
+
+SDL_Rect
+sc_touchmap_overlay_get_edit_button_rect(const SDL_Rect *content_rect,
+                                         bool edit_mode);
 
 #endif

@@ -41,6 +41,8 @@ struct sc_input_manager {
     enum sc_gamepad_input_mode gamepad_input_mode;
     const char *touchmap_file;
     struct sc_touchmap_drag_state touchmap_drag;
+    bool touchmap_dirty;
+    bool touchmap_exit_after_save;
 
     struct sc_mouse_bindings mouse_bindings;
     bool legacy_paste;

@@ -22,6 +22,7 @@ struct sc_touchmap_overlay {
     SDL_Texture *overlay_texture;
     struct sc_size last_size;
     bool enabled;
+    bool edit_mode;
 };
 
 struct sc_display {
