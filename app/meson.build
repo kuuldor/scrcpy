@@ -262,6 +262,7 @@ if get_option('buildtype') == 'debug'
         ['test_touchmap', [
             'tests/test_touchmap.c',
             'src/touchmap.c',
+            'src/touchmap_editor.c',
             'src/touchmap_overlay.c',
             'src/third_party/cjson/cJSON.c',
             'src/util/log.c',

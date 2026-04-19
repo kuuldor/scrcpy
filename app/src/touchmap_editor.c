@@ -207,3 +207,73 @@ sc_touchmap_editor_apply_drag(struct sc_touchmap_editor *editor,
             return false;
     }
 }
+
+bool
+sc_touchmap_editor_nudge_selection(struct sc_touchmap_editor *editor,
+                                   struct sc_gptm_gamepad_touchmap *map,
+                                   int32_t dx, int32_t dy,
+                                   int32_t radius_delta) {
+    if (!map || !editor) {
+        return false;
+    }
+
+    struct sc_touchmap_editor_selection selection = editor->selection;
+    switch (selection.target) {
+        case SC_TOUCHMAP_EDITOR_TARGET_WALK_CENTER:
+            if (!dx && !dy) {
+                return false;
+            }
+            map->walk.center.x += dx;
+            map->walk.center.y += dy;
+            map->walk.current_pos = map->walk.center;
+            return true;
+        case SC_TOUCHMAP_EDITOR_TARGET_BUTTON_CENTER: {
+            if ((!dx && !dy) || selection.button_index < 0
+                    || selection.button_index >= map->button_cnt) {
+                return false;
+            }
+            struct sc_gptm_touch_button *btn =
+                &map->buttons[selection.button_index];
+            btn->center.x += dx;
+            btn->center.y += dy;
+            btn->current_pos = btn->center;
+            return true;
+        }
+        case SC_TOUCHMAP_EDITOR_TARGET_WALK_RADIUS: {
+            if (!radius_delta) {
+                return false;
+            }
+            int32_t radius = map->walk.radius + radius_delta;
+            if (radius < SC_TOUCHMAP_MIN_RADIUS) {
+                radius = SC_TOUCHMAP_MIN_RADIUS;
+            }
+            if (radius == map->walk.radius) {
+                return false;
+            }
+            map->walk.radius = radius;
+            return true;
+        }
+        case SC_TOUCHMAP_EDITOR_TARGET_BUTTON_RADIUS: {
+            if (!radius_delta || selection.button_index < 0
+                    || selection.button_index >= map->button_cnt) {
+                return false;
+            }
+            struct sc_gptm_touch_button *btn =
+                &map->buttons[selection.button_index];
+            if (!btn->is_skill) {
+                return false;
+            }
+            int32_t radius = btn->radius + radius_delta;
+            if (radius < SC_TOUCHMAP_MIN_RADIUS) {
+                radius = SC_TOUCHMAP_MIN_RADIUS;
+            }
+            if (radius == btn->radius) {
+                return false;
+            }
+            btn->radius = radius;
+            return true;
+        }
+        default:
+            return false;
+    }
+}

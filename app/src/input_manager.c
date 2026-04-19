@@ -654,6 +654,64 @@ save_touchmap_file(struct sc_input_manager *im, const char *filename) {
 
 
 
+static bool
+sc_input_manager_process_touchmap_edit_key(struct sc_input_manager *im,
+                                           const SDL_KeyboardEvent *event) {
+    if (!sc_touchmap_edit_mode_active(im)) {
+        return false;
+    }
+
+    SDL_Keycode sdl_keycode = event->keysym.sym;
+    if (sdl_keycode != SDLK_LEFT && sdl_keycode != SDLK_RIGHT
+            && sdl_keycode != SDLK_UP && sdl_keycode != SDLK_DOWN) {
+        return false;
+    }
+
+    uint16_t mod = event->keysym.mod;
+    if (mod & (KMOD_CTRL | KMOD_ALT | KMOD_GUI)) {
+        return false;
+    }
+
+    if (event->type != SDL_KEYDOWN) {
+        return true;
+    }
+
+    int32_t step = mod & KMOD_SHIFT ? 10 : 1;
+    int32_t dx = 0;
+    int32_t dy = 0;
+    int32_t radius_delta = 0;
+
+    switch (sdl_keycode) {
+        case SDLK_LEFT:
+            dx = -step;
+            radius_delta = -step;
+            break;
+        case SDLK_RIGHT:
+            dx = step;
+            radius_delta = step;
+            break;
+        case SDLK_UP:
+            dy = -step;
+            radius_delta = step;
+            break;
+        case SDLK_DOWN:
+            dy = step;
+            radius_delta = -step;
+            break;
+        default:
+            assert(false);
+            return true;
+    }
+
+    if (sc_touchmap_editor_nudge_selection(&im->touchmap_editor,
+                                           im->game_touchmap, dx, dy,
+                                           radius_delta)) {
+        im->touchmap_dirty = true;
+    }
+
+    return true;
+}
+
 static void
 sc_input_manager_process_key(struct sc_input_manager *im,
                              const SDL_KeyboardEvent *event) {
@@ -676,6 +734,10 @@ sc_input_manager_process_key(struct sc_input_manager *im,
         } else {
             save_touchmap_file(im, im->touchmap_file);
         }
+        return;
+    }
+
+    if (sc_input_manager_process_touchmap_edit_key(im, event)) {
         return;
     }
 

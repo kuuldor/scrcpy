@@ -10,6 +10,7 @@
 #include "options.h"
 #include "third_party/cjson/cJSON.h"
 #include "touchmap.h"
+#include "touchmap_editor.h"
 #include "touchmap_overlay.h"
 
 static bool
@@ -229,6 +230,66 @@ test_overlay_coordinate_transforms(void) {
         7, &frame_size, &rotated, SC_ORIENTATION_90) == 70);
 }
 
+static void
+test_editor_keyboard_nudging(void) {
+    struct sc_gptm_gamepad_touchmap *map =
+        calloc(1, sizeof(*map) + 2 * sizeof(*map->buttons));
+    assert(map);
+
+    map->walk.center = (struct sc_point) {100, 200};
+    map->walk.current_pos = map->walk.center;
+    map->walk.radius = 40;
+    map->button_cnt = 2;
+    map->buttons[0].center = (struct sc_point) {300, 400};
+    map->buttons[0].current_pos = map->buttons[0].center;
+    map->buttons[0].radius = 0;
+    map->buttons[0].is_skill = false;
+    map->buttons[1].center = (struct sc_point) {500, 600};
+    map->buttons[1].current_pos = map->buttons[1].center;
+    map->buttons[1].radius = 50;
+    map->buttons[1].is_skill = true;
+
+    struct sc_touchmap_editor editor;
+    sc_touchmap_editor_init(&editor);
+
+    assert(!sc_touchmap_editor_nudge_selection(&editor, map, 1, 0, 1));
+
+    editor.selection.target = SC_TOUCHMAP_EDITOR_TARGET_WALK_CENTER;
+    editor.selection.button_index = -1;
+    assert(sc_touchmap_editor_nudge_selection(&editor, map, -1, 0, -1));
+    assert(map->walk.center.x == 99);
+    assert(map->walk.center.y == 200);
+    assert(map->walk.current_pos.x == 99);
+    assert(map->walk.current_pos.y == 200);
+    assert(map->walk.radius == 40);
+
+    editor.selection.target = SC_TOUCHMAP_EDITOR_TARGET_WALK_RADIUS;
+    assert(sc_touchmap_editor_nudge_selection(&editor, map, 0, -1, 10));
+    assert(map->walk.radius == 50);
+    assert(sc_touchmap_editor_nudge_selection(&editor, map, 0, 1, -100));
+    assert(map->walk.radius == SC_TOUCHMAP_MIN_RADIUS);
+    assert(!sc_touchmap_editor_nudge_selection(&editor, map, 0, 1, -1));
+
+    editor.selection.target = SC_TOUCHMAP_EDITOR_TARGET_BUTTON_CENTER;
+    editor.selection.button_index = 0;
+    assert(sc_touchmap_editor_nudge_selection(&editor, map, 10, -10, 10));
+    assert(map->buttons[0].center.x == 310);
+    assert(map->buttons[0].center.y == 390);
+    assert(map->buttons[0].current_pos.x == 310);
+    assert(map->buttons[0].current_pos.y == 390);
+    assert(map->buttons[0].radius == 0);
+
+    editor.selection.target = SC_TOUCHMAP_EDITOR_TARGET_BUTTON_RADIUS;
+    assert(!sc_touchmap_editor_nudge_selection(&editor, map, 0, 0, 10));
+    assert(map->buttons[0].radius == 0);
+
+    editor.selection.button_index = 1;
+    assert(sc_touchmap_editor_nudge_selection(&editor, map, 0, 0, 10));
+    assert(map->buttons[1].radius == 60);
+
+    sc_gptm_gamepad_touchmap_destroy(map);
+}
+
 int
 main(int argc, char *argv[]) {
     (void) argc;
@@ -236,5 +297,6 @@ main(int argc, char *argv[]) {
 
     test_parse_save_preserves_metadata();
     test_overlay_coordinate_transforms();
+    test_editor_keyboard_nudging();
     return 0;
 }

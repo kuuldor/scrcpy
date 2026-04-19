@@ -227,6 +227,10 @@ Editing gestures:
 - Drag the walk radius edge to resize the walk control.
 - Drag a button center to move a button.
 - Drag a skill radius edge to resize a skill area.
+- Use the arrow keys to nudge the selected control by one frame pixel.
+- Hold `Shift` with an arrow key to nudge by ten frame pixels.
+- For selected radius targets, `Right`/`Up` increase the radius and
+  `Left`/`Down` decrease it.
 
 Change tracking:
 
@@ -321,7 +325,8 @@ These decisions were agreed for the next implementation passes:
 - Trigger thresholds should remain hard-coded for now unless controller
   reliability problems appear.
 - The editor should show selection state.
-- Keyboard/gamepad nudging is undecided. Keep it recorded for later.
+- Keyboard nudging is supported for selected controls in edit mode. Gamepad
+  nudging is not planned.
 - Add/remove/rebind controls are required later, after earlier editor
   foundations are in place.
 - Controller-driven editing is not planned.
@@ -361,7 +366,7 @@ Use this list to track future work. Implement one item at a time.
 
 - [x] Add focused tests for JSON parse/save behavior and coordinate transforms
   where the local test harness supports it.
-- [ ] Decide whether to add keyboard nudging for precise movement and radius
+- [x] Decide whether to add keyboard nudging for precise movement and radius
   changes.
 - [ ] Add add/remove workflows for mapped controls.
 - [ ] Add rebinding workflows for mapped controls.
