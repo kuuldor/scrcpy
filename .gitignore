@@ -12,3 +12,4 @@ local.properties
 docker/
 prebuilt/
 .cache
+.codex
