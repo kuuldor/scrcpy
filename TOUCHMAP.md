@@ -33,11 +33,12 @@ Display and edit the overlay:
 
 - Shortcut modifier + `E`: toggle the overlay, unless edit mode is active.
 - Click the `EDIT` button in the overlay to enter edit mode.
-- Click the `CLOSE` button in edit mode to leave edit mode.
-- `Ctrl+S`: open a save dialog for the current touchmap.
+- Click the `QUIT` button in edit mode to leave edit mode.
+- `Ctrl+S`: save directly to the current touchmap file when one is loaded.
+- `Ctrl+Shift+S`: open Save As for the current touchmap.
 
 The "shortcut modifier" is scrcpy's configured shortcut modifier, not
-hard-coded Ctrl. The edit save shortcut is currently hard-coded to Ctrl.
+hard-coded Ctrl. The save shortcuts are currently hard-coded to Ctrl.
 
 ## Data Model
 
@@ -47,6 +48,7 @@ The runtime model is defined in `app/src/touchmap.h`.
 
 - `joystick[2]`: current left and right stick values in SDL axis units.
 - `walk`: the left-stick touch control.
+- `json_root`: retained parsed JSON tree used to preserve metadata on save.
 - `button_cnt`: number of mapped buttons.
 - `buttons[]`: flexible array of regular and skill buttons.
 
@@ -57,6 +59,8 @@ The runtime model is defined in `app/src/touchmap.h`.
 - `current_pos`: current injected touch point.
 - `touch_down`: whether the virtual walk finger is currently down.
 - `finger_id`: stable virtual pointer id for this control.
+- `json_entry`: non-owning pointer into `json_root` for the JSON object that
+  stores this control.
 
 `struct sc_gptm_touch_button` stores:
 
@@ -68,6 +72,13 @@ The runtime model is defined in `app/src/touchmap.h`.
 - `button`: SDL controller button id, with LT/RT represented as
   `SDL_CONTROLLER_BUTTON_MAX + SDL_CONTROLLER_AXIS_TRIGGERLEFT/RIGHT`.
 - `is_skill`: true for skill-casting mappings.
+- `json_entry`: non-owning pointer into `json_root` for the JSON object that
+  stores this control.
+
+`struct sc_touchmap_editor`, defined in `app/src/touchmap_editor.h`, owns edit
+selection and drag state. It tracks the selected target and the active drag
+target separately, so later editor actions can operate on the selected control
+without depending on the input manager.
 
 The source of truth for persisted positions is device frame coordinates, not
 window coordinates. Overlay rendering converts frame coordinates to the current
@@ -107,8 +118,11 @@ Supported mapping sections:
 
 The parser also tolerates extra fields such as `type`, `joystick`,
 `packageName`, and `titles` because it only reads the fields it needs. The
-saver does not preserve unknown fields; it writes a normalized file containing
-the known mapping data only.
+saver preserves those unknown fields by retaining the parsed JSON tree,
+duplicating it on save, updating known fields, and rebuilding the regular and
+skill mapping arrays from the current in-memory controls. On successful save,
+the map's retained `json_root` and per-control `json_entry` pointers are
+relinked to the saved JSON model.
 
 Supported button names include:
 
@@ -159,6 +173,14 @@ Skill button behavior:
   position within the skill radius.
 - On release, inject UP at the current skill position.
 
+Edit-mode safety:
+
+- Entering edit mode releases any active touchmap virtual touches first.
+- While edit mode is active, gamepad-to-touch output is suppressed.
+- While edit mode is active, mouse/touch/scroll input is consumed by the editor
+  and does not reach the underlying Android game, except for overlay editor
+  interactions.
+
 ## Overlay Rendering
 
 The overlay is initialized and owned by `struct sc_display` in
@@ -179,7 +201,10 @@ Current visual elements:
 - Skill radius in edit mode: dashed white circle.
 - Active touch positions: solid filled indicators.
 - Button labels: built-in bitmap glyphs for common controller labels.
-- Edit control: `EDIT` or `CLOSE` button in the top-right of the content rect.
+- Selection highlight: yellow multi-ring outline around the selected center or
+  radius target in edit mode.
+- Edit control: green `EDIT` or red `QUIT` button in the top-right of the
+  content rect.
 
 The overlay code applies display orientation transforms so rendered mapping
 positions follow scrcpy orientation changes. Stored coordinates remain in
@@ -187,8 +212,9 @@ unrotated frame coordinates.
 
 ## Edit Mode
 
-Edit mode is implemented in `app/src/input_manager.c` with visual support from
-`app/src/touchmap_overlay.c`.
+Edit mode is coordinated by `app/src/input_manager.c`, but editor hit testing,
+selection state, and drag mutation live in `app/src/touchmap_editor.c`. Visual
+feedback is rendered by `app/src/touchmap_overlay.c`.
 
 Entering edit mode:
 
@@ -209,8 +235,10 @@ Change tracking:
 - Leaving edit mode prompts to save if there are unsaved changes.
 - Choosing save starts a save-file dialog thread and exits edit mode after a
   successful save.
-- Choosing no discards only the dirty flag; it does not reload the original
-  file. The in-memory edited map remains active.
+- Choosing no reloads the current touchmap file from disk, restoring saved
+  positions and sizes before exiting edit mode.
+- `Ctrl+S` saves directly to the current file when available. `Ctrl+Shift+S`
+  opens Save As.
 
 Minimum radius:
 
@@ -220,42 +248,37 @@ Minimum radius:
 
 - `app/src/touchmap.h`: runtime touchmap structs and public parser/saver API.
 - `app/src/touchmap.c`: JSON parsing, JSON saving, button name conversion, and
-  button sorting for binary search.
-- `app/src/input_manager.h`: input manager state, edit drag state, and touchmap
+  button sorting for binary search. Saving preserves unknown metadata and
+  relinks the retained JSON model after successful writes.
+- `app/src/touchmap_editor.h`: editor selection and drag state API.
+- `app/src/touchmap_editor.c`: editor hit testing, selection updates, and drag
+  mutation of touchmap controls.
+- `app/src/input_manager.h`: input manager state, editor state, and touchmap
   fields.
 - `app/src/input_manager.c`: shortcut handling, file dialogs, runtime
-  gamepad-to-touch translation, edit hit testing, drag mutation, and save flow.
+  gamepad-to-touch translation, edit-mode safety, and save flow.
 - `app/src/touchmap_overlay.h`: overlay rendering API and color constants.
 - `app/src/touchmap_overlay.c`: SDL overlay drawing, coordinate transforms,
-  glyph labels, edit button layout, and overlay visibility/edit-mode state.
+  glyph labels, selection highlighting, edit button layout, and overlay
+  visibility/edit-mode state.
 - `app/src/display.h`: display-owned overlay state and active touchmap pointer.
 - `app/src/display.c`: overlay initialization, destruction, rendering, and
   display-level touchmap setters/toggles.
 - `app/src/screen.c`: window/drawable/frame coordinate conversion and routing
   SDL events into the input manager.
-- `app/meson.build`: includes `touchmap.c`, `touchmap_overlay.c`, and links
-  libm for math functions.
+- `app/meson.build`: includes `touchmap.c`, `touchmap_editor.c`,
+  `touchmap_overlay.c`, and links libm for math functions.
 
 ## Known Limitations
 
-- Edit mode does not currently suppress gamepad-to-touch injection. Editing
-  while actively using the gamepad can interact with the device.
-- Edit mode does not currently suppress normal mouse touch injection unless a
-  drag/edit hit test consumes the event. This means ordinary clicks can still
-  reach the underlying game.
 - The in-memory map is edited directly. There is no separate draft copy or undo
   stack.
-- Choosing "No" when leaving edit mode clears the dirty flag but does not
-  revert the in-memory edits.
-- Save rewrites only known fields and drops unknown metadata.
 - File dialogs run on SDL threads and communicate back through custom SDL
   events. This is functional, but state ownership should be treated carefully.
-- Hit testing and editor logic live in `input_manager.c`, which is convenient
-  but will become hard to maintain if the editor grows.
 - The right stick is hard-coded as the skill aiming stick.
 - The left stick is hard-coded as the walk stick.
 - Axis trigger thresholds are hard-coded.
-- The overlay colors are hard-coded.
+- Overlay colors are hard-coded.
 
 ## Reconciled Notes From Earlier Docs
 
