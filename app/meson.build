@@ -34,6 +34,7 @@ src = [
     'src/screen.c',
     'src/server.c',
     'src/touchmap.c',
+    'src/touchmap_editor.c',
     'src/touchmap_overlay.c',
     'src/version.c',
     'src/hid/hid_gamepad.c',

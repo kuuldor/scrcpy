@@ -8,6 +8,7 @@
 #define SC_GPTM_BASE_FINGER_ID   UINT64_C(100)
 
 #define SC_GPTM_WALK_CONTROL_DEADZONE   25
+#define SC_TOUCHMAP_MIN_RADIUS          32
 
 struct cJSON;
 

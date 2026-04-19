@@ -11,23 +11,10 @@
 #include "controller.h"
 #include "file_pusher.h"
 #include "options.h"
+#include "touchmap_editor.h"
 #include "trait/gamepad_processor.h"
 #include "trait/key_processor.h"
 #include "trait/mouse_processor.h"
-
-enum sc_touchmap_drag_target {
-    SC_TOUCHMAP_DRAG_NONE,
-    SC_TOUCHMAP_DRAG_WALK_CENTER,
-    SC_TOUCHMAP_DRAG_WALK_RADIUS,
-    SC_TOUCHMAP_DRAG_BUTTON_CENTER,
-    SC_TOUCHMAP_DRAG_BUTTON_RADIUS,
-};
-
-struct sc_touchmap_drag_state {
-    bool active;
-    enum sc_touchmap_drag_target target;
-    int button_index;
-};
 
 struct sc_input_manager {
     struct sc_controller *controller;
@@ -40,7 +27,7 @@ struct sc_input_manager {
     struct sc_gptm_gamepad_touchmap *game_touchmap;
     enum sc_gamepad_input_mode gamepad_input_mode;
     const char *touchmap_file;
-    struct sc_touchmap_drag_state touchmap_drag;
+    struct sc_touchmap_editor touchmap_editor;
     bool touchmap_dirty;
     bool touchmap_exit_after_save;
     bool touchmap_consume_left_button_up;

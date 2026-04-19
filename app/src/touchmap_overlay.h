@@ -18,7 +18,6 @@ struct sc_touchmap_overlay;
 #define SC_OVERLAY_BUTTON_COLOR     0x6BFF6B55  // Stronger green tint
 #define SC_OVERLAY_SKILL_COLOR      0x6B6BFF70  // Stronger blue tint
 #define SC_OVERLAY_TEXT_COLOR       0xFFFFFFB0  // White, high opacity
-#define SC_TOUCHMAP_MIN_RADIUS      32
 
 #define SC_OVERLAY_DASH_COLOR       0xFFFFFFD0
 #define SC_OVERLAY_EDIT_BG_COLOR    0x00000080

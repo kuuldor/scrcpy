@@ -324,10 +324,10 @@ Use this list to track future work. Implement one item at a time.
 
 ### Editor Architecture
 
-- [ ] Move editor hit testing, selection state, and mutation logic out of
+- [x] Move editor hit testing, selection state, and mutation logic out of
   `input_manager.c` into a dedicated editor module, likely
   `touchmap_editor.{c,h}`.
-- [ ] Add selection state for edited controls.
+- [x] Add selection state for edited controls.
 - [ ] Render visible selection state in the overlay.
 
 ### Later Editor Actions

@@ -4,7 +4,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <SDL2/SDL.h>
-#include <math.h>
 #include <SDL2/SDL_keycode.h>
 
 #include "android/input.h"
@@ -19,7 +18,6 @@
 #include "third_party/tfd/tinyfiledialogs.h"
 #include "events.h"
 
-static void sc_touchmap_drag_reset(struct sc_input_manager *im);
 static int save_touchmap_dialog_thread(void *data);
 static void sc_start_thread(const char *name, SDL_ThreadFunction fn, void *data);
 
@@ -44,7 +42,7 @@ sc_input_manager_init(struct sc_input_manager *im,
     im->touchmap_file = params->touchmap_file ? SDL_strdup(params->touchmap_file)
                                                : NULL;
     im->gamepad_input_mode = params->gamepad_input_mode;
-    sc_touchmap_drag_reset(im);
+    sc_touchmap_editor_init(&im->touchmap_editor);
     im->touchmap_dirty = false;
     im->touchmap_exit_after_save = false;
     im->touchmap_consume_left_button_up = false;
@@ -414,6 +412,7 @@ free_up_touchmap(struct sc_input_manager *im) {
         SDL_free((void *) im->touchmap_file);
         im->touchmap_file = NULL;
     }
+    sc_touchmap_editor_reset(&im->touchmap_editor);
 }
 
 static bool
@@ -433,7 +432,7 @@ sc_touchmap_reload_current_file(struct sc_input_manager *im) {
     sc_gptm_gamepad_touchmap_destroy(im->game_touchmap);
     im->game_touchmap = reloaded;
     sc_display_set_touchmap(&im->screen->display, im->game_touchmap);
-    sc_touchmap_drag_reset(im);
+    sc_touchmap_editor_reset(&im->touchmap_editor);
     im->touchmap_dirty = false;
     im->touchmap_exit_after_save = false;
     return true;
@@ -441,14 +440,7 @@ sc_touchmap_reload_current_file(struct sc_input_manager *im) {
 
 bool
 sc_touchmap_drag_is_active(const struct sc_input_manager *im) {
-    return im->touchmap_drag.active;
-}
-
-static void
-sc_touchmap_drag_reset(struct sc_input_manager *im) {
-    im->touchmap_drag.active = false;
-    im->touchmap_drag.target = SC_TOUCHMAP_DRAG_NONE;
-    im->touchmap_drag.button_index = -1;
+    return sc_touchmap_editor_is_dragging(&im->touchmap_editor);
 }
 
 bool
@@ -490,155 +482,6 @@ sc_touchmap_release_active_touches(struct sc_input_manager *im) {
 
     map->joystick[0] = (struct sc_point) {0, 0};
     map->joystick[1] = (struct sc_point) {0, 0};
-}
-
-static void
-sc_touchmap_drag_start(struct sc_input_manager *im,
-                       enum sc_touchmap_drag_target target,
-                       int button_index) {
-    im->touchmap_drag.active = true;
-    im->touchmap_drag.target = target;
-    im->touchmap_drag.button_index = button_index;
-}
-
-static int32_t
-sc_touchmap_min_radius(void) {
-    return SC_TOUCHMAP_MIN_RADIUS;
-}
-
-static void
-sc_touchmap_apply_center_drag(struct sc_input_manager *im,
-                              struct sc_point point) {
-    if (!im->game_touchmap) {
-        return;
-    }
-
-    switch (im->touchmap_drag.target) {
-        case SC_TOUCHMAP_DRAG_WALK_CENTER:
-            im->game_touchmap->walk.center = point;
-            im->game_touchmap->walk.current_pos = point;
-            im->touchmap_dirty = true;
-            break;
-        case SC_TOUCHMAP_DRAG_BUTTON_CENTER:
-            if (im->touchmap_drag.button_index >= 0) {
-                struct sc_gptm_touch_button *btn =
-                    &im->game_touchmap->buttons[im->touchmap_drag.button_index];
-                btn->center = point;
-                btn->current_pos = point;
-                im->touchmap_dirty = true;
-            }
-            break;
-        default:
-            break;
-    }
-}
-
-static void
-sc_touchmap_apply_radius_drag(struct sc_input_manager *im,
-                              struct sc_point point) {
-    if (!im->game_touchmap) {
-        return;
-    }
-
-    int32_t min_radius = sc_touchmap_min_radius();
-    switch (im->touchmap_drag.target) {
-        case SC_TOUCHMAP_DRAG_WALK_RADIUS: {
-            struct sc_point center = im->game_touchmap->walk.center;
-            int32_t dx = point.x - center.x;
-            int32_t dy = point.y - center.y;
-            int32_t radius = (int32_t) sqrt((double) dx * dx + (double) dy * dy);
-            im->game_touchmap->walk.radius = radius > min_radius ? radius
-                                                                : min_radius;
-            im->touchmap_dirty = true;
-            break;
-        }
-        case SC_TOUCHMAP_DRAG_BUTTON_RADIUS:
-            if (im->touchmap_drag.button_index >= 0) {
-                struct sc_gptm_touch_button *btn =
-                    &im->game_touchmap->buttons[im->touchmap_drag.button_index];
-                struct sc_point center = btn->center;
-                int32_t dx = point.x - center.x;
-                int32_t dy = point.y - center.y;
-                int32_t radius = (int32_t) sqrt((double) dx * dx
-                                                + (double) dy * dy);
-                btn->radius = radius > min_radius ? radius : min_radius;
-                im->touchmap_dirty = true;
-            }
-            break;
-        default:
-            break;
-    }
-}
-
-static bool
-sc_touchmap_is_skill_button(const struct sc_gptm_touch_button *btn) {
-    return btn->is_skill;
-}
-
-static bool
-sc_touchmap_hit_test_radius(const struct sc_point *center, int32_t radius,
-                            struct sc_point point, int32_t threshold) {
-    int32_t dx = point.x - center->x;
-    int32_t dy = point.y - center->y;
-    int32_t dist = (int32_t) sqrt((double) dx * dx + (double) dy * dy);
-    return abs(dist - radius) <= threshold;
-}
-
-static bool
-sc_touchmap_hit_test_center(const struct sc_point *center, int32_t radius,
-                            struct sc_point point) {
-    int32_t dx = point.x - center->x;
-    int32_t dy = point.y - center->y;
-    int32_t dist2 = dx * dx + dy * dy;
-    return dist2 <= radius * radius;
-}
-
-static bool
-sc_touchmap_try_start_drag(struct sc_input_manager *im, struct sc_point point) {
-    if (!im->game_touchmap) {
-        return false;
-    }
-
-    int32_t min_radius = sc_touchmap_min_radius();
-    int32_t radius_threshold = min_radius / 4;
-
-    if (sc_touchmap_hit_test_radius(&im->game_touchmap->walk.center,
-                                    im->game_touchmap->walk.radius,
-                                    point, radius_threshold)) {
-        sc_touchmap_drag_start(im, SC_TOUCHMAP_DRAG_WALK_RADIUS, -1);
-        return true;
-    }
-
-    if (sc_touchmap_hit_test_center(&im->game_touchmap->walk.center,
-                                    min_radius, point)) {
-        sc_touchmap_drag_start(im, SC_TOUCHMAP_DRAG_WALK_CENTER, -1);
-        return true;
-    }
-
-    for (int i = 0; i < im->game_touchmap->button_cnt; ++i) {
-        struct sc_gptm_touch_button *btn = &im->game_touchmap->buttons[i];
-        int32_t radius = btn->radius > 0 ? btn->radius : min_radius;
-
-        if (sc_touchmap_is_skill_button(btn)
-                && sc_touchmap_hit_test_radius(&btn->center, radius, point,
-                                               radius_threshold)) {
-            sc_touchmap_drag_start(im, SC_TOUCHMAP_DRAG_BUTTON_RADIUS, i);
-            return true;
-        }
-
-        if (sc_touchmap_hit_test_center(&btn->center, min_radius, point)) {
-            sc_touchmap_drag_start(im, SC_TOUCHMAP_DRAG_BUTTON_CENTER, i);
-            return true;
-        }
-
-        if (sc_touchmap_hit_test_radius(&btn->center, radius, point,
-                                        radius_threshold)) {
-            sc_touchmap_drag_start(im, SC_TOUCHMAP_DRAG_BUTTON_RADIUS, i);
-            return true;
-        }
-    }
-
-    return false;
 }
 
 static bool
@@ -1115,17 +958,9 @@ sc_input_manager_process_mouse_motion(struct sc_input_manager *im,
         struct sc_point point =
             sc_screen_convert_window_to_frame_coords(im->screen, event->x,
                                                      event->y);
-        switch (im->touchmap_drag.target) {
-            case SC_TOUCHMAP_DRAG_WALK_CENTER:
-            case SC_TOUCHMAP_DRAG_BUTTON_CENTER:
-                sc_touchmap_apply_center_drag(im, point);
-                break;
-            case SC_TOUCHMAP_DRAG_WALK_RADIUS:
-            case SC_TOUCHMAP_DRAG_BUTTON_RADIUS:
-                sc_touchmap_apply_radius_drag(im, point);
-                break;
-            default:
-                break;
+        if (sc_touchmap_editor_apply_drag(&im->touchmap_editor,
+                                          im->game_touchmap, point)) {
+            im->touchmap_dirty = true;
         }
         return;
     }
@@ -1259,7 +1094,7 @@ sc_input_manager_process_mouse_button(struct sc_input_manager *im,
     if (sc_touchmap_edit_mode_active(im)) {
         if (!down && event->button == SDL_BUTTON_LEFT
                 && sc_touchmap_drag_is_active(im)) {
-            sc_touchmap_drag_reset(im);
+            sc_touchmap_editor_reset_drag(&im->touchmap_editor);
             return;
         }
 
@@ -1270,7 +1105,8 @@ sc_input_manager_process_mouse_button(struct sc_input_manager *im,
         if (down && event->button == SDL_BUTTON_LEFT) {
             struct sc_point point = sc_screen_convert_window_to_frame_coords(
                 im->screen, event->x, event->y);
-            if (!sc_touchmap_try_start_drag(im, point)) {
+            if (!sc_touchmap_editor_try_start_drag(&im->touchmap_editor,
+                                                   im->game_touchmap, point)) {
                 im->touchmap_consume_left_button_up = true;
             }
         }
@@ -1350,7 +1186,7 @@ sc_input_manager_process_mouse_button(struct sc_input_manager *im,
     }
 
     if (!down && event->button == SDL_BUTTON_LEFT && sc_touchmap_drag_is_active(im)) {
-        sc_touchmap_drag_reset(im);
+        sc_touchmap_editor_reset_drag(&im->touchmap_editor);
         return;
     }
 
