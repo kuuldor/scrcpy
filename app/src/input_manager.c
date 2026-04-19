@@ -440,6 +440,36 @@ sc_touchmap_edit_mode_active(const struct sc_input_manager *im) {
 }
 
 static void
+sc_touchmap_release_active_touches(struct sc_input_manager *im) {
+    struct sc_gptm_gamepad_touchmap *map = im->game_touchmap;
+    if (!map) {
+        return;
+    }
+
+    if (map->walk.touch_down) {
+        map->walk.touch_down = false;
+        simulate_virtual_touch(im, map->walk.finger_id,
+                               AMOTION_EVENT_ACTION_UP,
+                               map->walk.current_pos);
+    }
+    map->walk.current_pos = map->walk.center;
+
+    for (int i = 0; i < map->button_cnt; ++i) {
+        struct sc_gptm_touch_button *btn = &map->buttons[i];
+        if (btn->touch_down) {
+            btn->touch_down = false;
+            simulate_virtual_touch(im, btn->finger_id,
+                                   AMOTION_EVENT_ACTION_UP,
+                                   btn->current_pos);
+        }
+        btn->current_pos = btn->center;
+    }
+
+    map->joystick[0] = (struct sc_point) {0, 0};
+    map->joystick[1] = (struct sc_point) {0, 0};
+}
+
+static void
 sc_touchmap_drag_start(struct sc_input_manager *im,
                        enum sc_touchmap_drag_target target,
                        int button_index) {
@@ -609,6 +639,7 @@ sc_touchmap_toggle_edit_mode(struct sc_input_manager *im, int32_t x, int32_t y) 
 
     bool edit_mode = sc_touchmap_overlay_is_edit_mode(&im->screen->display.overlay);
     if (!edit_mode) {
+        sc_touchmap_release_active_touches(im);
         sc_touchmap_overlay_set_edit_mode(&im->screen->display.overlay, true);
         return true;
     }
@@ -1556,6 +1587,7 @@ sc_handle_touchmap_button(struct sc_input_manager *im, uint8_t button, uint8_t s
     if (state) {
         if (!touch_btn->touch_down) {
             touch_btn->touch_down = true;
+            touch_btn->current_pos = touch_btn->center;
             simulate_virtual_touch(im, touch_btn->finger_id, AMOTION_EVENT_ACTION_DOWN, touch_btn->center);
 
             if (touch_btn->is_skill) {
@@ -1578,8 +1610,6 @@ sc_handle_touchmap_button(struct sc_input_manager *im, uint8_t button, uint8_t s
                         sc_start_thread("DelaySkill", delay_skill_event_thread, ctx);                    
                     }
                 }
-            } else {
-                touch_btn->current_pos = touch_btn->center;
             }
         }
     } else {
