@@ -315,7 +315,7 @@ Use this list to track future work. Implement one item at a time.
 
 ### Save, Discard, and JSON
 
-- [ ] Implement true discard by reloading the current touchmap file from disk
+- [x] Implement true discard by reloading the current touchmap file from disk
   and refreshing overlay positions.
 - [ ] Change `Ctrl+S` to save directly to the current loaded file when one is
   available.

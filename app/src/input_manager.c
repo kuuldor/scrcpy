@@ -416,6 +416,29 @@ free_up_touchmap(struct sc_input_manager *im) {
     }
 }
 
+static bool
+sc_touchmap_reload_current_file(struct sc_input_manager *im) {
+    if (!im->touchmap_file) {
+        LOGW("No touchmap file to reload");
+        return false;
+    }
+
+    struct sc_gptm_gamepad_touchmap *reloaded =
+        parse_touchmap_config(im->touchmap_file);
+    if (!reloaded) {
+        LOGE("Fail to reload touchmap file %s", im->touchmap_file);
+        return false;
+    }
+
+    free(im->game_touchmap);
+    im->game_touchmap = reloaded;
+    sc_display_set_touchmap(&im->screen->display, im->game_touchmap);
+    sc_touchmap_drag_reset(im);
+    im->touchmap_dirty = false;
+    im->touchmap_exit_after_save = false;
+    return true;
+}
+
 bool
 sc_touchmap_drag_is_active(const struct sc_input_manager *im) {
     return im->touchmap_drag.active;
@@ -661,9 +684,10 @@ sc_touchmap_toggle_edit_mode(struct sc_input_manager *im, int32_t x, int32_t y) 
         im->touchmap_exit_after_save = true;
         sc_start_thread("SaveTouchMap", save_touchmap_dialog_thread, im);
     } else if (choice == 2) {
-        im->touchmap_dirty = false;
-        im->touchmap_exit_after_save = false;
-        sc_touchmap_overlay_set_edit_mode(&im->screen->display.overlay, false);
+        if (sc_touchmap_reload_current_file(im)) {
+            sc_touchmap_overlay_set_edit_mode(&im->screen->display.overlay,
+                                              false);
+        }
     } else {
         im->touchmap_exit_after_save = false;
     }
