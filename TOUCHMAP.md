@@ -328,7 +328,9 @@ Use this list to track future work. Implement one item at a time.
   `input_manager.c` into a dedicated editor module, likely
   `touchmap_editor.{c,h}`.
 - [x] Add selection state for edited controls.
-- [ ] Render visible selection state in the overlay.
+- [x] Render visible selection state in the overlay.
+- [x] Render the edit button with a green background, and the quit/close button
+  with a red background.
 
 ### Later Editor Actions
 

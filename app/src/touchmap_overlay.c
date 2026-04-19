@@ -627,13 +627,78 @@ sc_touchmap_transform_radius(int32_t radius, const struct sc_size *frame_size,
     return sx < sy ? sx : sy;
 }
 
+static void
+draw_selection_circle(SDL_Renderer *renderer, int32_t x, int32_t y,
+                      int32_t radius) {
+    for (int32_t offset = 0; offset < 3; ++offset) {
+        draw_circle_outline(renderer, x, y, radius + offset,
+                            SC_OVERLAY_SELECTION_COLOR);
+    }
+}
+
+static void
+draw_touchmap_selection(SDL_Renderer *renderer,
+                        const struct sc_gptm_gamepad_touchmap *touchmap,
+                        const struct sc_size *frame_size,
+                        const SDL_Rect *content_rect,
+                        enum sc_orientation orientation,
+                        const struct sc_touchmap_editor *touchmap_editor) {
+    if (!touchmap_editor) {
+        return;
+    }
+
+    struct sc_touchmap_editor_selection selection =
+        touchmap_editor->selection;
+    switch (selection.target) {
+        case SC_TOUCHMAP_EDITOR_TARGET_WALK_CENTER: {
+            struct sc_point center = sc_touchmap_transform_point(
+                &touchmap->walk.center, frame_size, content_rect, orientation);
+            int32_t radius = sc_touchmap_transform_radius(
+                SC_TOUCHMAP_MIN_RADIUS + 4, frame_size, content_rect,
+                orientation);
+            draw_selection_circle(renderer, center.x, center.y, radius);
+            break;
+        }
+        case SC_TOUCHMAP_EDITOR_TARGET_WALK_RADIUS: {
+            struct sc_point center = sc_touchmap_transform_point(
+                &touchmap->walk.center, frame_size, content_rect, orientation);
+            int32_t radius = sc_touchmap_transform_radius(
+                touchmap->walk.radius + 4, frame_size, content_rect,
+                orientation);
+            draw_selection_circle(renderer, center.x, center.y, radius);
+            break;
+        }
+        case SC_TOUCHMAP_EDITOR_TARGET_BUTTON_CENTER:
+        case SC_TOUCHMAP_EDITOR_TARGET_BUTTON_RADIUS: {
+            int index = selection.button_index;
+            if (index < 0 || index >= touchmap->button_cnt) {
+                break;
+            }
+
+            const struct sc_gptm_touch_button *btn = &touchmap->buttons[index];
+            struct sc_point center = sc_touchmap_transform_point(
+                &btn->center, frame_size, content_rect, orientation);
+            int32_t base_radius =
+                selection.target == SC_TOUCHMAP_EDITOR_TARGET_BUTTON_RADIUS
+                    && btn->radius > 0 ? btn->radius : SC_TOUCHMAP_MIN_RADIUS;
+            int32_t radius = sc_touchmap_transform_radius(
+                base_radius + 4, frame_size, content_rect, orientation);
+            draw_selection_circle(renderer, center.x, center.y, radius);
+            break;
+        }
+        default:
+            break;
+    }
+}
+
 bool
 sc_touchmap_overlay_render(struct sc_touchmap_overlay *overlay,
                            SDL_Renderer *renderer,
                            const struct sc_gptm_gamepad_touchmap *touchmap,
                            const struct sc_size *frame_size,
                            const SDL_Rect *content_rect,
-                           enum sc_orientation orientation) {
+                           enum sc_orientation orientation,
+                           const struct sc_touchmap_editor *touchmap_editor) {
     if (!overlay->enabled || !touchmap || !content_rect || !frame_size
             || !frame_size->width || !frame_size->height) {
         return true;
@@ -733,6 +798,11 @@ sc_touchmap_overlay_render(struct sc_touchmap_overlay *overlay,
         enum overlay_label label = button_value_to_label(btn->button);
         draw_button_label(renderer, btn_center.x, btn_center.y,
                           label, OVERLAY_GLYPH_SCALE_BUTTON);
+    }
+
+    if (overlay->edit_mode) {
+        draw_touchmap_selection(renderer, touchmap, frame_size, content_rect,
+                                orientation, touchmap_editor);
     }
 
     SDL_Rect edit_rect = sc_touchmap_overlay_get_edit_button_rect(content_rect,

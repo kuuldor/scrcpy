@@ -7,6 +7,7 @@
 #include <SDL2/SDL.h>
 
 #include "touchmap.h"
+#include "touchmap_editor.h"
 #include "options.h"
 #include "coords.h"
 
@@ -20,8 +21,9 @@ struct sc_touchmap_overlay;
 #define SC_OVERLAY_TEXT_COLOR       0xFFFFFFB0  // White, high opacity
 
 #define SC_OVERLAY_DASH_COLOR       0xFFFFFFD0
-#define SC_OVERLAY_EDIT_BG_COLOR    0x00000080
-#define SC_OVERLAY_EDIT_BG_ACTIVE   0x000000B0
+#define SC_OVERLAY_SELECTION_COLOR  0xFFD23FFF
+#define SC_OVERLAY_EDIT_BG_COLOR    0x267A3CBB
+#define SC_OVERLAY_EDIT_BG_ACTIVE   0x9A2A2ABB
 #define SC_OVERLAY_EDIT_BORDER      0xFFFFFFB0
 
 /**
@@ -61,7 +63,8 @@ sc_touchmap_overlay_render(struct sc_touchmap_overlay *overlay,
                            const struct sc_gptm_gamepad_touchmap *touchmap,
                            const struct sc_size *frame_size,
                            const SDL_Rect *content_rect,
-                           enum sc_orientation orientation);
+                           enum sc_orientation orientation,
+                           const struct sc_touchmap_editor *touchmap_editor);
 
 /**
  * Toggle overlay visibility

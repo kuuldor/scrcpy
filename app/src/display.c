@@ -313,7 +313,8 @@ sc_display_update_texture(struct sc_display *display, const AVFrame *frame) {
 
 enum sc_display_result
 sc_display_render(struct sc_display *display, const SDL_Rect *geometry,
-                  enum sc_orientation orientation) {
+                  enum sc_orientation orientation,
+                  const struct sc_touchmap_editor *touchmap_editor) {
     SDL_RenderClear(display->renderer);
 
     if (display->pending.flags) {
@@ -362,7 +363,7 @@ sc_display_render(struct sc_display *display, const SDL_Rect *geometry,
     if (display->touchmap) {
         sc_touchmap_overlay_render(&display->overlay, display->renderer,
                                   display->touchmap, &display->frame_size,
-                                  dstrect, orientation);
+                                  dstrect, orientation, touchmap_editor);
     }
 
     SDL_RenderPresent(display->renderer);
@@ -379,4 +380,3 @@ void
 sc_display_toggle_overlay(struct sc_display *display) {
     sc_touchmap_overlay_toggle(&display->overlay);
 }
-

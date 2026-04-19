@@ -12,6 +12,7 @@
 #include "opengl.h"
 #include "options.h"
 #include "touchmap.h"
+#include "touchmap_editor.h"
 
 #ifdef __APPLE__
 # define SC_DISPLAY_FORCE_OPENGL_CORE_PROFILE
@@ -72,7 +73,8 @@ sc_display_update_texture(struct sc_display *display, const AVFrame *frame);
 
 enum sc_display_result
 sc_display_render(struct sc_display *display, const SDL_Rect *geometry,
-                  enum sc_orientation orientation);
+                  enum sc_orientation orientation,
+                  const struct sc_touchmap_editor *touchmap_editor);
 
 void
 sc_display_set_touchmap(struct sc_display *display,
