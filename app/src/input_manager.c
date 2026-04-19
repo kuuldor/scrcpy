@@ -432,6 +432,12 @@ sc_touchmap_has_ctrl_modifier(void) {
     return SDL_GetModState() & KMOD_CTRL;
 }
 
+static bool
+sc_touchmap_edit_mode_active(const struct sc_input_manager *im) {
+    return im->game_touchmap
+        && sc_touchmap_overlay_is_edit_mode(&im->screen->display.overlay);
+}
+
 static void
 sc_touchmap_drag_start(struct sc_input_manager *im,
                        enum sc_touchmap_drag_target target,
@@ -1474,6 +1480,10 @@ sc_input_manager_process_file(struct sc_input_manager *im,
 
 static void 
 sc_handle_skill_button_direction(struct sc_input_manager *im, struct sc_gptm_touch_button *touch_btn, struct sc_point pos) {
+    if (sc_touchmap_edit_mode_active(im)) {
+        return;
+    }
+
     touch_btn->current_pos.x = touch_btn->center.x + (pos.x * touch_btn->radius / SDL_MAX_SINT16);
     touch_btn->current_pos.y = touch_btn->center.y + (pos.y * touch_btn->radius / SDL_MAX_SINT16);
 
@@ -1501,6 +1511,10 @@ static int delay_skill_event_thread(void *data) {
 
 static void 
 sc_handle_touchmap_button(struct sc_input_manager *im, uint8_t button, uint8_t state) {
+    if (sc_touchmap_edit_mode_active(im)) {
+        return;
+    }
+
     struct sc_gptm_gamepad_touchmap * map = im->game_touchmap;
     struct sc_gptm_touch_button key = {.button = button};
     struct sc_gptm_touch_button * touch_btn = bsearch(&key, map->buttons, map->button_cnt, 
@@ -1548,6 +1562,10 @@ sc_handle_touchmap_button(struct sc_input_manager *im, uint8_t button, uint8_t s
 
 static void 
 sc_handle_touchmap_walk(struct sc_input_manager *im, struct sc_point pos) {
+    if (sc_touchmap_edit_mode_active(im)) {
+        return;
+    }
+
     struct sc_gptm_walk_control *walk = &im->game_touchmap->walk;
 
     int wctl_x, wctl_y, distance;
@@ -1575,6 +1593,10 @@ sc_handle_touchmap_walk(struct sc_input_manager *im, struct sc_point pos) {
 
 static void 
 sc_handle_touchmap_skill_cast(struct sc_input_manager *im, struct sc_point pos) {
+    if (sc_touchmap_edit_mode_active(im)) {
+        return;
+    }
+
     struct sc_gptm_gamepad_touchmap *map = im->game_touchmap;
 
     for (int i = 0; i < map->button_cnt; i++) {
@@ -1587,6 +1609,10 @@ sc_handle_touchmap_skill_cast(struct sc_input_manager *im, struct sc_point pos) 
 
 static void 
 sc_handle_touchmap_joystick(struct sc_input_manager *im, int idx, int64_t value, bool is_x_axis) {
+    if (sc_touchmap_edit_mode_active(im)) {
+        return;
+    }
+
     struct sc_point *joystick = &im->game_touchmap->joystick[idx];
 
     if (is_x_axis) {
@@ -1660,6 +1686,10 @@ sc_input_manager_handle_event(struct sc_input_manager *im,
                 break;
             }
 
+            if (sc_touchmap_edit_mode_active(im)) {
+                break;
+            }
+
             LOGD("Gamepad Axis: (%d, %d, %d)", event->caxis.which, event->caxis.axis, event->caxis.value);
 
             if (im->game_touchmap == NULL) {
@@ -1692,6 +1722,11 @@ sc_input_manager_handle_event(struct sc_input_manager *im,
             if (!im->gp || paused) {
                 break;
             }
+
+            if (sc_touchmap_edit_mode_active(im)) {
+                break;
+            }
+
             LOGD("Gamepad Button: (%d, %d, %d)", event->cbutton.which, event->cbutton.button, event->cbutton.state);
 
             if (im->game_touchmap == NULL) {
