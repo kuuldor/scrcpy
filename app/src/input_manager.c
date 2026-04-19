@@ -407,7 +407,7 @@ inverse_point(struct sc_point point, struct sc_size size,
 static inline void
 free_up_touchmap(struct sc_input_manager *im) {
     if (im->game_touchmap != NULL) {
-        free(im->game_touchmap);
+        sc_gptm_gamepad_touchmap_destroy(im->game_touchmap);
         im->game_touchmap = NULL;
     }
     if (im->touchmap_file) {
@@ -430,7 +430,7 @@ sc_touchmap_reload_current_file(struct sc_input_manager *im) {
         return false;
     }
 
-    free(im->game_touchmap);
+    sc_gptm_gamepad_touchmap_destroy(im->game_touchmap);
     im->game_touchmap = reloaded;
     sc_display_set_touchmap(&im->screen->display, im->game_touchmap);
     sc_touchmap_drag_reset(im);
@@ -786,15 +786,23 @@ save_touchmap_file(struct sc_input_manager *im, const char *filename) {
         return;
     }
 
+    char *filename_dup = SDL_strdup(filename);
+    if (!filename_dup) {
+        LOG_OOM();
+        im->touchmap_exit_after_save = false;
+        return;
+    }
+
     if (!save_touchmap_config(filename, im->game_touchmap)) {
         LOGE("Fail to save touchmap file %s", filename);
+        SDL_free(filename_dup);
         im->touchmap_exit_after_save = false;
         return;
     }
 
     im->touchmap_dirty = false;
     SDL_free((void *) im->touchmap_file);
-    im->touchmap_file = SDL_strdup(filename);
+    im->touchmap_file = filename_dup;
     if (im->touchmap_exit_after_save) {
         sc_touchmap_overlay_set_edit_mode(&im->screen->display.overlay, false);
         im->touchmap_exit_after_save = false;
@@ -818,9 +826,13 @@ sc_input_manager_process_key(struct sc_input_manager *im,
     bool shift = event->keysym.mod & KMOD_SHIFT;
     bool repeat = event->repeat;
 
-    if (sdl_keycode == SDLK_s && ctrl && !shift && down && !repeat
+    if (sdl_keycode == SDLK_s && ctrl && down && !repeat
             && im->game_touchmap) {
-        sc_start_thread("SaveTouchMap", save_touchmap_dialog_thread, im);
+        if (shift || !im->touchmap_file) {
+            sc_start_thread("SaveTouchMap", save_touchmap_dialog_thread, im);
+        } else {
+            save_touchmap_file(im, im->touchmap_file);
+        }
         return;
     }
 

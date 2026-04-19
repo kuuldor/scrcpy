@@ -83,6 +83,229 @@ int sc_gptm_compare_btn(const void *a, const void *b) {
     return p1->button - p2->button;
 }
 
+void
+sc_gptm_gamepad_touchmap_destroy(struct sc_gptm_gamepad_touchmap *map) {
+    if (!map) {
+        return;
+    }
+
+    if (map->json_root) {
+        cJSON_Delete(map->json_root);
+    }
+    free(map);
+}
+
+static bool
+replace_or_add(cJSON *object, const char *name, cJSON *item) {
+    if (!object || !name || !item) {
+        cJSON_Delete(item);
+        return false;
+    }
+
+    if (cJSON_GetObjectItemCaseSensitive(object, name)) {
+        if (!cJSON_ReplaceItemInObjectCaseSensitive(object, name, item)) {
+            cJSON_Delete(item);
+            return false;
+        }
+    } else if (!cJSON_AddItemToObject(object, name, item)) {
+        cJSON_Delete(item);
+        return false;
+    }
+
+    return true;
+}
+
+static cJSON *
+get_or_add_object(cJSON *object, const char *name) {
+    cJSON *item = cJSON_GetObjectItemCaseSensitive(object, name);
+    if (cJSON_IsObject(item)) {
+        return item;
+    }
+
+    cJSON *replacement = cJSON_CreateObject();
+    if (!replacement) {
+        return NULL;
+    }
+
+    if (!replace_or_add(object, name, replacement)) {
+        return NULL;
+    }
+
+    return replacement;
+}
+
+static bool
+set_number_item(cJSON *object, const char *name, int32_t value) {
+    cJSON *item = cJSON_GetObjectItemCaseSensitive(object, name);
+    if (cJSON_IsNumber(item)) {
+        cJSON_SetNumberValue(item, value);
+        return true;
+    }
+
+    return replace_or_add(object, name, cJSON_CreateNumber(value));
+}
+
+static bool
+set_string_item(cJSON *object, const char *name, const char *value) {
+    cJSON *item = cJSON_GetObjectItemCaseSensitive(object, name);
+    if (cJSON_IsString(item)) {
+        return cJSON_SetValuestring(item, value) != NULL;
+    }
+
+    return replace_or_add(object, name, cJSON_CreateString(value));
+}
+
+static bool
+update_point_object(cJSON *object, const char *name,
+                    const struct sc_point *point) {
+    cJSON *point_object = get_or_add_object(object, name);
+    if (!point_object) {
+        return false;
+    }
+
+    return set_number_item(point_object, "x", point->x)
+        && set_number_item(point_object, "y", point->y);
+}
+
+static bool
+update_walk_json(cJSON *mappings,
+                 const struct sc_gptm_walk_control *walk,
+                 cJSON **json_entry) {
+    cJSON *entry = get_or_add_object(mappings, "walk_control");
+    if (!entry) {
+        return false;
+    }
+
+    bool ok = update_point_object(entry, "center", &walk->center)
+           && set_number_item(entry, "radius", walk->radius);
+    if (ok && json_entry) {
+        *json_entry = entry;
+    }
+    return ok;
+}
+
+static bool
+update_button_json(cJSON *entry, const struct sc_gptm_touch_button *btn) {
+    const char *btn_name = button_value_to_name(btn->button);
+    if (!set_string_item(entry, "button", btn_name)) {
+        return false;
+    }
+
+    if (btn->is_skill) {
+        return update_point_object(entry, "center", &btn->center)
+            && set_number_item(entry, "radius", btn->radius);
+    }
+
+    return update_point_object(entry, "touch", &btn->center);
+}
+
+static cJSON *
+create_button_json_entry(const struct sc_gptm_touch_button *btn) {
+    cJSON *entry = cJSON_IsObject(btn->json_entry)
+                 ? cJSON_Duplicate(btn->json_entry, true)
+                 : cJSON_CreateObject();
+    if (!entry) {
+        return NULL;
+    }
+
+    if (!update_button_json(entry, btn)) {
+        cJSON_Delete(entry);
+        return NULL;
+    }
+
+    return entry;
+}
+
+static bool
+rebuild_button_arrays(cJSON *mappings,
+                      const struct sc_gptm_gamepad_touchmap *map,
+                      cJSON **json_entries) {
+    cJSON *buttons = cJSON_CreateArray();
+    cJSON *skills = cJSON_CreateArray();
+    if (!buttons || !skills) {
+        cJSON_Delete(buttons);
+        cJSON_Delete(skills);
+        return false;
+    }
+
+    for (int i = 0; i < map->button_cnt; ++i) {
+        const struct sc_gptm_touch_button *btn = &map->buttons[i];
+        cJSON *entry = create_button_json_entry(btn);
+        if (!entry) {
+            cJSON_Delete(buttons);
+            cJSON_Delete(skills);
+            return false;
+        }
+
+        cJSON *target = btn->is_skill ? skills : buttons;
+        if (!cJSON_AddItemToArray(target, entry)) {
+            cJSON_Delete(entry);
+            cJSON_Delete(buttons);
+            cJSON_Delete(skills);
+            return false;
+        }
+
+        if (json_entries) {
+            json_entries[i] = entry;
+        }
+    }
+
+    if (!replace_or_add(mappings, "button_mappings", buttons)) {
+        cJSON_Delete(skills);
+        return false;
+    }
+
+    if (!replace_or_add(mappings, "skill_casting", skills)) {
+        return false;
+    }
+
+    return true;
+}
+
+static bool
+update_touchmap_json_root(struct sc_gptm_gamepad_touchmap *map) {
+    cJSON **button_json_entries = NULL;
+    if (map->button_cnt > 0) {
+        button_json_entries = calloc(map->button_cnt,
+                                     sizeof(*button_json_entries));
+        if (!button_json_entries) {
+            LOG_OOM();
+            return false;
+        }
+    }
+
+    cJSON *walk_json_entry = NULL;
+    cJSON *root = map->json_root ? cJSON_Duplicate(map->json_root, true)
+                                 : cJSON_CreateObject();
+    if (!root) {
+        free(button_json_entries);
+        return false;
+    }
+
+    cJSON *mappings = get_or_add_object(root, "mappings");
+    if (!mappings || !update_walk_json(mappings, &map->walk,
+                                       &walk_json_entry)
+            || !rebuild_button_arrays(mappings, map,
+                                      button_json_entries)) {
+        free(button_json_entries);
+        cJSON_Delete(root);
+        return false;
+    }
+
+    if (map->json_root) {
+        cJSON_Delete(map->json_root);
+    }
+
+    map->json_root = root;
+    map->walk.json_entry = walk_json_entry;
+    for (int i = 0; i < map->button_cnt; ++i) {
+        map->buttons[i].json_entry = button_json_entries[i];
+    }
+
+    free(button_json_entries);
+    return true;
+}
+
 struct sc_gptm_gamepad_touchmap * parse_touchmap_config(const char *filename) {
     if (filename == NULL) {
         LOGE("No touchmap file defined");
@@ -148,10 +371,13 @@ struct sc_gptm_gamepad_touchmap * parse_touchmap_config(const char *filename) {
         map =(struct sc_gptm_gamepad_touchmap *) malloc(alloc_size);
         if (map == NULL) {
             LOGE("Failed to allocate memory");
+            cJSON_Delete(root);
+            free(json_string);
             return NULL;
         }
         memset(map, 0, alloc_size);
         map->button_cnt = skill_cnt+btn_cnt;
+        map->json_root = root;
 
         cJSON *walk_control = cJSON_GetObjectItem(mappings, "walk_control");
         if (walk_control) {
@@ -165,6 +391,7 @@ struct sc_gptm_gamepad_touchmap * parse_touchmap_config(const char *filename) {
                 map->walk.radius = radius->valueint;
                 LOGI("Walk Control Center: (%d, %d) radius: %d", x, y, map->walk.radius);
                 map->walk.finger_id = finger_id++;
+                map->walk.json_entry = walk_control;
             }
         }
 
@@ -185,6 +412,7 @@ struct sc_gptm_gamepad_touchmap * parse_touchmap_config(const char *filename) {
                 touch_btn->button = button_name_to_value(btn_name);
                 touch_btn->is_skill = false;
                 touch_btn->finger_id = finger_id++;
+                touch_btn->json_entry = button;
 
                 touch_btn++;
             }
@@ -207,6 +435,7 @@ struct sc_gptm_gamepad_touchmap * parse_touchmap_config(const char *filename) {
                 touch_btn->button = button_name_to_value(btn_name);
                 touch_btn->is_skill = true;
                 touch_btn->finger_id = finger_id++;
+                touch_btn->json_entry = skill;
                 touch_btn++;
             }
         }
@@ -214,8 +443,9 @@ struct sc_gptm_gamepad_touchmap * parse_touchmap_config(const char *filename) {
         qsort(map->buttons, map->button_cnt, sizeof(struct sc_gptm_touch_button), sc_gptm_compare_btn);
     }
 
-    // Cleanup
-    cJSON_Delete(root);
+    if (!map) {
+        cJSON_Delete(root);
+    }
     free(json_string);
 
     return map;
@@ -223,50 +453,19 @@ struct sc_gptm_gamepad_touchmap * parse_touchmap_config(const char *filename) {
 
 bool
 save_touchmap_config(const char *filename,
-                     const struct sc_gptm_gamepad_touchmap *map) {
+                     struct sc_gptm_gamepad_touchmap *map) {
     if (!filename || !map) {
         LOGE("No touchmap to save");
         return false;
     }
 
-    cJSON *root = cJSON_CreateObject();
-    cJSON *mappings = cJSON_AddObjectToObject(root, "mappings");
-
-    cJSON *walk_control = cJSON_AddObjectToObject(mappings, "walk_control");
-    cJSON *walk_center = cJSON_AddObjectToObject(walk_control, "center");
-    cJSON_AddNumberToObject(walk_center, "x", map->walk.center.x);
-    cJSON_AddNumberToObject(walk_center, "y", map->walk.center.y);
-    cJSON_AddNumberToObject(walk_control, "radius", map->walk.radius);
-
-    cJSON *buttons = cJSON_AddArrayToObject(mappings, "button_mappings");
-    cJSON *skills = cJSON_AddArrayToObject(mappings, "skill_casting");
-
-    for (int i = 0; i < map->button_cnt; ++i) {
-        const struct sc_gptm_touch_button *btn = &map->buttons[i];
-        const char *btn_name = button_value_to_name(btn->button);
-        cJSON *entry = NULL;
-
-        if (btn->is_skill) {
-            entry = cJSON_CreateObject();
-            cJSON_AddStringToObject(entry, "button", btn_name);
-            cJSON *center = cJSON_AddObjectToObject(entry, "center");
-            cJSON_AddNumberToObject(center, "x", btn->center.x);
-            cJSON_AddNumberToObject(center, "y", btn->center.y);
-            cJSON_AddNumberToObject(entry, "radius", btn->radius);
-            cJSON_AddItemToArray(skills, entry);
-        } else {
-            entry = cJSON_CreateObject();
-            cJSON *touch = cJSON_AddObjectToObject(entry, "touch");
-            cJSON_AddNumberToObject(touch, "x", btn->center.x);
-            cJSON_AddNumberToObject(touch, "y", btn->center.y);
-            cJSON_AddStringToObject(entry, "button", btn_name);
-            cJSON_AddItemToArray(buttons, entry);
-        }
+    if (!update_touchmap_json_root(map)) {
+        LOGE("Failed to create touchmap JSON");
+        return false;
     }
 
-    char *json_string = cJSON_Print(root);
+    char *json_string = cJSON_Print(map->json_root);
     if (!json_string) {
-        cJSON_Delete(root);
         LOGE("Failed to serialize touchmap");
         return false;
     }
@@ -275,7 +474,6 @@ save_touchmap_config(const char *filename,
     if (!file) {
         LOGE("Failed to open file for writing: %s", filename);
         cJSON_free(json_string);
-        cJSON_Delete(root);
         return false;
     }
 
@@ -283,7 +481,5 @@ save_touchmap_config(const char *filename,
     fclose(file);
 
     cJSON_free(json_string);
-    cJSON_Delete(root);
     return true;
 }
-

@@ -317,10 +317,10 @@ Use this list to track future work. Implement one item at a time.
 
 - [x] Implement true discard by reloading the current touchmap file from disk
   and refreshing overlay positions.
-- [ ] Change `Ctrl+S` to save directly to the current loaded file when one is
+- [x] Change `Ctrl+S` to save directly to the current loaded file when one is
   available.
-- [ ] Add `Ctrl+Shift+S` as Save As.
-- [ ] Preserve source JSON metadata and unknown fields when saving.
+- [x] Add `Ctrl+Shift+S` as Save As.
+- [x] Preserve source JSON metadata and unknown fields when saving.
 
 ### Editor Architecture
 
