@@ -43,6 +43,7 @@ struct sc_input_manager {
     struct sc_touchmap_drag_state touchmap_drag;
     bool touchmap_dirty;
     bool touchmap_exit_after_save;
+    bool touchmap_consume_left_button_up;
 
     struct sc_mouse_bindings mouse_bindings;
     bool legacy_paste;

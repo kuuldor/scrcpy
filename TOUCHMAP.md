@@ -308,7 +308,7 @@ Use this list to track future work. Implement one item at a time.
 ### Editor Safety
 
 - [x] Suppress all gamepad-to-touch output while edit mode is active.
-- [ ] Suppress underlying mouse touch/click injection while edit mode is active,
+- [x] Suppress underlying mouse touch/click injection while edit mode is active,
   except for overlay editor interactions.
 - [ ] Ensure any active virtual touches are released or otherwise made safe
   when entering edit mode.

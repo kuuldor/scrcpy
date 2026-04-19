@@ -47,6 +47,7 @@ sc_input_manager_init(struct sc_input_manager *im,
     sc_touchmap_drag_reset(im);
     im->touchmap_dirty = false;
     im->touchmap_exit_after_save = false;
+    im->touchmap_consume_left_button_up = false;
     im->legacy_paste = params->legacy_paste;
     im->clipboard_autosync = params->clipboard_autosync;
 
@@ -1062,6 +1063,10 @@ sc_input_manager_process_mouse_motion(struct sc_input_manager *im,
         return;
     }
 
+    if (sc_touchmap_edit_mode_active(im)) {
+        return;
+    }
+
     struct sc_mouse_motion_event evt = {
         .position = sc_input_manager_get_position(im, event->x, event->y),
         .pointer_id = im->vfinger_down ? SC_POINTER_ID_GENERIC_FINGER
@@ -1092,6 +1097,10 @@ sc_input_manager_process_mouse_motion(struct sc_input_manager *im,
 static void
 sc_input_manager_process_touch(struct sc_input_manager *im,
                                const SDL_TouchFingerEvent *event) {
+    if (sc_touchmap_edit_mode_active(im)) {
+        return;
+    }
+
     if (!im->mp->ops->process_touch) {
         // The mouse processor does not support touch events
         return;
@@ -1164,6 +1173,44 @@ sc_input_manager_process_mouse_button(struct sc_input_manager *im,
     bool ctrl_pressed = sc_touchmap_has_ctrl_modifier();
     bool shift_pressed = keymod & KMOD_SHIFT;
 
+    if (!down && event->button == SDL_BUTTON_LEFT
+            && im->touchmap_consume_left_button_up) {
+        im->touchmap_consume_left_button_up = false;
+        return;
+    }
+
+    if (down && event->button == SDL_BUTTON_LEFT) {
+        int32_t x = event->x;
+        int32_t y = event->y;
+        sc_screen_hidpi_scale_coords(im->screen, &x, &y);
+        if (sc_touchmap_toggle_edit_mode(im, x, y)) {
+            im->touchmap_consume_left_button_up = true;
+            return;
+        }
+    }
+
+    if (sc_touchmap_edit_mode_active(im)) {
+        if (!down && event->button == SDL_BUTTON_LEFT
+                && sc_touchmap_drag_is_active(im)) {
+            sc_touchmap_drag_reset(im);
+            return;
+        }
+
+        if (sc_touchmap_drag_is_active(im)) {
+            return;
+        }
+
+        if (down && event->button == SDL_BUTTON_LEFT) {
+            struct sc_point point = sc_screen_convert_window_to_frame_coords(
+                im->screen, event->x, event->y);
+            if (!sc_touchmap_try_start_drag(im, point)) {
+                im->touchmap_consume_left_button_up = true;
+            }
+        }
+
+        return;
+    }
+
     if (control && !paused) {
         enum sc_action action = down ? SC_ACTION_DOWN : SC_ACTION_UP;
 
@@ -1226,15 +1273,6 @@ sc_input_manager_process_mouse_button(struct sc_input_manager *im,
         }
     }
 
-    if (down && event->button == SDL_BUTTON_LEFT) {
-        int32_t x = event->x;
-        int32_t y = event->y;
-        sc_screen_hidpi_scale_coords(im->screen, &x, &y);
-        if (sc_touchmap_toggle_edit_mode(im, x, y)) {
-            return;
-        }
-    }
-
     if (!im->mp || paused) {
         return;
     }
@@ -1253,19 +1291,7 @@ sc_input_manager_process_mouse_button(struct sc_input_manager *im,
         return;
     }
 
-    bool start_drag = false;
-    bool edit_mode = sc_touchmap_overlay_is_edit_mode(&im->screen->display.overlay);
-    if (down && event->button == SDL_BUTTON_LEFT && edit_mode) {
-        struct sc_point point = sc_screen_convert_window_to_frame_coords(
-            im->screen, event->x, event->y);
-        start_drag = sc_touchmap_try_start_drag(im, point);
-        if (start_drag) {
-            return;
-        }
-    }
-
     bool change_vfinger = event->button == SDL_BUTTON_LEFT &&
-            !start_drag &&
             ((down && !im->vfinger_down && (ctrl_pressed || shift_pressed)) ||
              (!down && im->vfinger_down));
     bool use_finger = im->vfinger_down || change_vfinger;
@@ -1339,6 +1365,10 @@ sc_input_manager_process_mouse_button(struct sc_input_manager *im,
 static void
 sc_input_manager_process_mouse_wheel(struct sc_input_manager *im,
                                      const SDL_MouseWheelEvent *event) {
+    if (sc_touchmap_edit_mode_active(im)) {
+        return;
+    }
+
     if (!im->mp->ops->process_mouse_scroll) {
         // The mouse processor does not support scroll events
         return;
