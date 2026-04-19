@@ -259,6 +259,13 @@ if get_option('buildtype') == 'debug'
             'tests/test_orientation.c',
             'src/options.c',
         ]],
+        ['test_touchmap', [
+            'tests/test_touchmap.c',
+            'src/touchmap.c',
+            'src/touchmap_overlay.c',
+            'src/third_party/cjson/cJSON.c',
+            'src/util/log.c',
+        ]],
         ['test_strbuf', [
             'tests/test_strbuf.c',
             'src/util/strbuf.c',

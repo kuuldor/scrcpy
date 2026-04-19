@@ -266,6 +266,8 @@ Minimum radius:
   display-level touchmap setters/toggles.
 - `app/src/screen.c`: window/drawable/frame coordinate conversion and routing
   SDL events into the input manager.
+- `app/tests/test_touchmap.c`: focused tests for touchmap JSON parse/save
+  metadata preservation and overlay coordinate transforms.
 - `app/meson.build`: includes `touchmap.c`, `touchmap_editor.c`,
   `touchmap_overlay.c`, and links libm for math functions.
 
@@ -295,8 +297,8 @@ The previous docs are stale or incomplete in these areas:
 - Regular buttons are green in the current code, not red.
 - Walk control is low-opacity white in the current code, not green.
 - Button labels are already implemented with built-in glyphs; SDL_ttf is not
-  required for current labels.
-- Overlay orientation transforms are already implemented.
+- Overlay orientation transforms are already implemented and covered by focused
+  tests.
 - Edit mode, dirty tracking, and save prompts are now part of the feature.
 - Shortcuts should be described as scrcpy shortcut modifier combinations where
   applicable, not always Ctrl combinations.
@@ -357,7 +359,7 @@ Use this list to track future work. Implement one item at a time.
 
 ### Later Editor Actions
 
-- [ ] Add focused tests for JSON parse/save behavior and coordinate transforms
+- [x] Add focused tests for JSON parse/save behavior and coordinate transforms
   where the local test harness supports it.
 - [ ] Decide whether to add keyboard nudging for precise movement and radius
   changes.

@@ -104,4 +104,18 @@ SDL_Rect
 sc_touchmap_overlay_get_edit_button_rect(const SDL_Rect *content_rect,
                                          bool edit_mode);
 
+#ifdef SC_TEST
+struct sc_point
+sc_touchmap_overlay_transform_point(const struct sc_point *point,
+                                    const struct sc_size *frame_size,
+                                    const SDL_Rect *content_rect,
+                                    enum sc_orientation orientation);
+
+int32_t
+sc_touchmap_overlay_transform_radius(int32_t radius,
+                                     const struct sc_size *frame_size,
+                                     const SDL_Rect *content_rect,
+                                     enum sc_orientation orientation);
+#endif
+
 #endif

@@ -553,11 +553,14 @@ sc_touchmap_overlay_destroy(struct sc_touchmap_overlay *overlay) {
     }
 }
 
-static struct sc_point
-sc_touchmap_transform_point(const struct sc_point *point,
-                            const struct sc_size *frame_size,
-                            const SDL_Rect *content_rect,
-                            enum sc_orientation orientation) {
+#ifndef SC_TEST
+static
+#endif
+struct sc_point
+sc_touchmap_overlay_transform_point(const struct sc_point *point,
+                                    const struct sc_size *frame_size,
+                                    const SDL_Rect *content_rect,
+                                    enum sc_orientation orientation) {
     struct sc_point oriented = *point;
     int32_t fw = frame_size->width;
     int32_t fh = frame_size->height;
@@ -566,7 +569,7 @@ sc_touchmap_transform_point(const struct sc_point *point,
         case SC_ORIENTATION_0:
             break;
         case SC_ORIENTATION_90:
-            oriented.x = fw - point->y;
+            oriented.x = fh - point->y;
             oriented.y = point->x;
             break;
         case SC_ORIENTATION_180:
@@ -575,15 +578,15 @@ sc_touchmap_transform_point(const struct sc_point *point,
             break;
         case SC_ORIENTATION_270:
             oriented.x = point->y;
-            oriented.y = fh - point->x;
+            oriented.y = fw - point->x;
             break;
         case SC_ORIENTATION_FLIP_0:
             oriented.x = fw - point->x;
             oriented.y = point->y;
             break;
         case SC_ORIENTATION_FLIP_90:
-            oriented.x = fw - point->y;
-            oriented.y = fh - point->x;
+            oriented.x = fh - point->y;
+            oriented.y = fw - point->x;
             break;
         case SC_ORIENTATION_FLIP_180:
             oriented.x = point->x;
@@ -609,10 +612,14 @@ sc_touchmap_transform_point(const struct sc_point *point,
     return result;
 }
 
-static int32_t
-sc_touchmap_transform_radius(int32_t radius, const struct sc_size *frame_size,
-                             const SDL_Rect *content_rect,
-                             enum sc_orientation orientation) {
+#ifndef SC_TEST
+static
+#endif
+int32_t
+sc_touchmap_overlay_transform_radius(int32_t radius,
+                                     const struct sc_size *frame_size,
+                                     const SDL_Rect *content_rect,
+                                     enum sc_orientation orientation) {
     int32_t fw = frame_size->width;
     int32_t fh = frame_size->height;
 
@@ -651,18 +658,18 @@ draw_touchmap_selection(SDL_Renderer *renderer,
         touchmap_editor->selection;
     switch (selection.target) {
         case SC_TOUCHMAP_EDITOR_TARGET_WALK_CENTER: {
-            struct sc_point center = sc_touchmap_transform_point(
+            struct sc_point center = sc_touchmap_overlay_transform_point(
                 &touchmap->walk.center, frame_size, content_rect, orientation);
-            int32_t radius = sc_touchmap_transform_radius(
+            int32_t radius = sc_touchmap_overlay_transform_radius(
                 SC_TOUCHMAP_MIN_RADIUS + 4, frame_size, content_rect,
                 orientation);
             draw_selection_circle(renderer, center.x, center.y, radius);
             break;
         }
         case SC_TOUCHMAP_EDITOR_TARGET_WALK_RADIUS: {
-            struct sc_point center = sc_touchmap_transform_point(
+            struct sc_point center = sc_touchmap_overlay_transform_point(
                 &touchmap->walk.center, frame_size, content_rect, orientation);
-            int32_t radius = sc_touchmap_transform_radius(
+            int32_t radius = sc_touchmap_overlay_transform_radius(
                 touchmap->walk.radius + 4, frame_size, content_rect,
                 orientation);
             draw_selection_circle(renderer, center.x, center.y, radius);
@@ -676,12 +683,12 @@ draw_touchmap_selection(SDL_Renderer *renderer,
             }
 
             const struct sc_gptm_touch_button *btn = &touchmap->buttons[index];
-            struct sc_point center = sc_touchmap_transform_point(
+            struct sc_point center = sc_touchmap_overlay_transform_point(
                 &btn->center, frame_size, content_rect, orientation);
             int32_t base_radius =
                 selection.target == SC_TOUCHMAP_EDITOR_TARGET_BUTTON_RADIUS
                     && btn->radius > 0 ? btn->radius : SC_TOUCHMAP_MIN_RADIUS;
-            int32_t radius = sc_touchmap_transform_radius(
+            int32_t radius = sc_touchmap_overlay_transform_radius(
                 base_radius + 4, frame_size, content_rect, orientation);
             draw_selection_circle(renderer, center.x, center.y, radius);
             break;
@@ -706,9 +713,9 @@ sc_touchmap_overlay_render(struct sc_touchmap_overlay *overlay,
 
     // Draw walk control (outer circle)
     if (touchmap->walk.radius > 0) {
-        struct sc_point walk_center = sc_touchmap_transform_point(
+        struct sc_point walk_center = sc_touchmap_overlay_transform_point(
             &touchmap->walk.center, frame_size, content_rect, orientation);
-        int32_t walk_radius = sc_touchmap_transform_radius(
+        int32_t walk_radius = sc_touchmap_overlay_transform_radius(
             touchmap->walk.radius, frame_size, content_rect, orientation);
 
         draw_filled_circle(renderer,
@@ -727,9 +734,9 @@ sc_touchmap_overlay_render(struct sc_touchmap_overlay *overlay,
 
     // Draw current position for walk control
     if (touchmap->walk.touch_down) {
-        struct sc_point walk_pos = sc_touchmap_transform_point(
+        struct sc_point walk_pos = sc_touchmap_overlay_transform_point(
             &touchmap->walk.current_pos, frame_size, content_rect, orientation);
-        int32_t walk_pos_radius = sc_touchmap_transform_radius(
+        int32_t walk_pos_radius = sc_touchmap_overlay_transform_radius(
             OVERLAY_WALK_POS_RADIUS, frame_size, content_rect, orientation);
         if (walk_pos_radius < 1) {
             walk_pos_radius = 1;
@@ -743,7 +750,7 @@ sc_touchmap_overlay_render(struct sc_touchmap_overlay *overlay,
     }
 
     if (touchmap->walk.radius > 0) {
-        struct sc_point walk_center = sc_touchmap_transform_point(
+        struct sc_point walk_center = sc_touchmap_overlay_transform_point(
             &touchmap->walk.center, frame_size, content_rect, orientation);
         int walk_label_scale = OVERLAY_GLYPH_SCALE_WALK;
         int offset = (OVERLAY_GLYPH_HEIGHT + OVERLAY_GLYPH_SPACING) / 2
@@ -765,7 +772,7 @@ sc_touchmap_overlay_render(struct sc_touchmap_overlay *overlay,
         uint32_t color = btn->is_skill ? SC_OVERLAY_SKILL_COLOR
                                        : SC_OVERLAY_BUTTON_COLOR;
 
-        struct sc_point btn_center = sc_touchmap_transform_point(
+        struct sc_point btn_center = sc_touchmap_overlay_transform_point(
             &btn->center, frame_size, content_rect, orientation);
 
         // Draw button area as filled circle with transparency
@@ -781,7 +788,7 @@ sc_touchmap_overlay_render(struct sc_touchmap_overlay *overlay,
                            outline_color);
 
         if (btn->is_skill && btn->radius > 0 && overlay->edit_mode) {
-            int32_t skill_radius = sc_touchmap_transform_radius(
+            int32_t skill_radius = sc_touchmap_overlay_transform_radius(
                 btn->radius, frame_size, content_rect, orientation);
             draw_dashed_circle_outline(renderer, btn_center.x, btn_center.y,
                                        skill_radius, SC_OVERLAY_DASH_COLOR);
@@ -789,7 +796,7 @@ sc_touchmap_overlay_render(struct sc_touchmap_overlay *overlay,
 
         // Draw button indicator if touched
         if (btn->touch_down) {
-            struct sc_point btn_pos = sc_touchmap_transform_point(
+            struct sc_point btn_pos = sc_touchmap_overlay_transform_point(
                 &btn->current_pos, frame_size, content_rect, orientation);
             draw_filled_circle(renderer, btn_pos.x, btn_pos.y,
                               OVERLAY_PRESSED_RADIUS, outline_color);
