@@ -451,6 +451,25 @@ test_editor_keyboard_nudging(void) {
 
     struct sc_touchmap_editor editor;
     sc_touchmap_editor_init(&editor);
+    assert(sc_touchmap_editor_get_mode(&editor)
+           == SC_TOUCHMAP_EDITOR_MODE_SELECT);
+
+    sc_touchmap_editor_set_mode(&editor,
+                                SC_TOUCHMAP_EDITOR_MODE_PLACE_BUTTON);
+    assert(sc_touchmap_editor_get_mode(&editor)
+           == SC_TOUCHMAP_EDITOR_MODE_PLACE_BUTTON);
+    assert(!sc_touchmap_editor_try_start_drag(
+        &editor, map, (struct sc_point) {300, 400}));
+    sc_touchmap_editor_set_mode(&editor, SC_TOUCHMAP_EDITOR_MODE_ADD_MENU);
+    assert(sc_touchmap_editor_get_mode(&editor)
+           == SC_TOUCHMAP_EDITOR_MODE_ADD_MENU);
+    sc_touchmap_editor_set_mode(&editor, SC_TOUCHMAP_EDITOR_MODE_PLACE_SKILL);
+    assert(sc_touchmap_editor_get_mode(&editor)
+           == SC_TOUCHMAP_EDITOR_MODE_PLACE_SKILL);
+    sc_touchmap_editor_set_mode(&editor, SC_TOUCHMAP_EDITOR_MODE_PLACE_WALK);
+    assert(sc_touchmap_editor_get_mode(&editor)
+           == SC_TOUCHMAP_EDITOR_MODE_PLACE_WALK);
+    sc_touchmap_editor_set_mode(&editor, SC_TOUCHMAP_EDITOR_MODE_SELECT);
 
     assert(!sc_touchmap_editor_nudge_selection(&editor, map, 1, 0, 1));
 
@@ -488,10 +507,14 @@ test_editor_keyboard_nudging(void) {
     assert(map->buttons[1].radius == 60);
 
     sc_touchmap_editor_select_button(&editor, 0);
+    assert(sc_touchmap_editor_get_mode(&editor)
+           == SC_TOUCHMAP_EDITOR_MODE_SELECT);
     assert(editor.selection.target == SC_TOUCHMAP_EDITOR_TARGET_BUTTON_CENTER);
     assert(editor.selection.button_index == 0);
 
     sc_touchmap_editor_select_walk(&editor);
+    assert(sc_touchmap_editor_get_mode(&editor)
+           == SC_TOUCHMAP_EDITOR_MODE_SELECT);
     assert(editor.selection.target == SC_TOUCHMAP_EDITOR_TARGET_WALK_CENTER);
     assert(editor.selection.button_index == -1);
 

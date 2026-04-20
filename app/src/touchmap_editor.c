@@ -11,6 +11,7 @@ sc_touchmap_editor_selection_reset(struct sc_touchmap_editor_selection *selectio
 
 void
 sc_touchmap_editor_init(struct sc_touchmap_editor *editor) {
+    editor->mode = SC_TOUCHMAP_EDITOR_MODE_SELECT;
     editor->dragging = false;
     sc_touchmap_editor_selection_reset(&editor->drag);
     sc_touchmap_editor_selection_reset(&editor->selection);
@@ -28,13 +29,27 @@ sc_touchmap_editor_reset_drag(struct sc_touchmap_editor *editor) {
 }
 
 void
+sc_touchmap_editor_set_mode(struct sc_touchmap_editor *editor,
+                            enum sc_touchmap_editor_mode mode) {
+    editor->mode = mode;
+    sc_touchmap_editor_reset_drag(editor);
+}
+
+enum sc_touchmap_editor_mode
+sc_touchmap_editor_get_mode(const struct sc_touchmap_editor *editor) {
+    return editor->mode;
+}
+
+void
 sc_touchmap_editor_clear_selection(struct sc_touchmap_editor *editor) {
+    editor->mode = SC_TOUCHMAP_EDITOR_MODE_SELECT;
     sc_touchmap_editor_selection_reset(&editor->selection);
     sc_touchmap_editor_reset_drag(editor);
 }
 
 void
 sc_touchmap_editor_select_walk(struct sc_touchmap_editor *editor) {
+    editor->mode = SC_TOUCHMAP_EDITOR_MODE_SELECT;
     sc_touchmap_editor_reset_drag(editor);
     editor->selection.target = SC_TOUCHMAP_EDITOR_TARGET_WALK_CENTER;
     editor->selection.button_index = -1;
@@ -43,6 +58,7 @@ sc_touchmap_editor_select_walk(struct sc_touchmap_editor *editor) {
 void
 sc_touchmap_editor_select_button(struct sc_touchmap_editor *editor,
                                  int button_index) {
+    editor->mode = SC_TOUCHMAP_EDITOR_MODE_SELECT;
     sc_touchmap_editor_reset_drag(editor);
     if (button_index < 0) {
         sc_touchmap_editor_selection_reset(&editor->selection);
@@ -75,6 +91,7 @@ static void
 sc_touchmap_editor_start_drag(struct sc_touchmap_editor *editor,
                               enum sc_touchmap_editor_target target,
                               int button_index) {
+    editor->mode = SC_TOUCHMAP_EDITOR_MODE_SELECT;
     editor->dragging = true;
     editor->drag.target = target;
     editor->drag.button_index = button_index;
@@ -110,6 +127,10 @@ sc_touchmap_editor_try_start_drag(struct sc_touchmap_editor *editor,
                                   const struct sc_gptm_gamepad_touchmap *map,
                                   struct sc_point point) {
     if (!map) {
+        return false;
+    }
+
+    if (editor->mode != SC_TOUCHMAP_EDITOR_MODE_SELECT) {
         return false;
     }
 

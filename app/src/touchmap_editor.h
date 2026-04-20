@@ -16,12 +16,21 @@ enum sc_touchmap_editor_target {
     SC_TOUCHMAP_EDITOR_TARGET_BUTTON_RADIUS,
 };
 
+enum sc_touchmap_editor_mode {
+    SC_TOUCHMAP_EDITOR_MODE_SELECT,
+    SC_TOUCHMAP_EDITOR_MODE_ADD_MENU,
+    SC_TOUCHMAP_EDITOR_MODE_PLACE_BUTTON,
+    SC_TOUCHMAP_EDITOR_MODE_PLACE_SKILL,
+    SC_TOUCHMAP_EDITOR_MODE_PLACE_WALK,
+};
+
 struct sc_touchmap_editor_selection {
     enum sc_touchmap_editor_target target;
     int button_index;
 };
 
 struct sc_touchmap_editor {
+    enum sc_touchmap_editor_mode mode;
     bool dragging;
     struct sc_touchmap_editor_selection drag;
     struct sc_touchmap_editor_selection selection;
@@ -35,6 +44,13 @@ sc_touchmap_editor_reset(struct sc_touchmap_editor *editor);
 
 void
 sc_touchmap_editor_reset_drag(struct sc_touchmap_editor *editor);
+
+void
+sc_touchmap_editor_set_mode(struct sc_touchmap_editor *editor,
+                            enum sc_touchmap_editor_mode mode);
+
+enum sc_touchmap_editor_mode
+sc_touchmap_editor_get_mode(const struct sc_touchmap_editor *editor);
 
 void
 sc_touchmap_editor_clear_selection(struct sc_touchmap_editor *editor);

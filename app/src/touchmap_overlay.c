@@ -469,10 +469,6 @@ static const enum overlay_glyph overlay_label_del[] = {
     OVERLAY_GLYPH_D, OVERLAY_GLYPH_E, OVERLAY_GLYPH_L,
 };
 
-static const enum overlay_glyph overlay_label_bind[] = {
-    OVERLAY_GLYPH_B, OVERLAY_GLYPH_I, OVERLAY_GLYPH_N, OVERLAY_GLYPH_D,
-};
-
 static const enum overlay_glyph overlay_label_quit[] = {
     OVERLAY_GLYPH_Q, OVERLAY_GLYPH_U, OVERLAY_GLYPH_I, OVERLAY_GLYPH_T,
 };
@@ -509,10 +505,6 @@ overlay_get_word(enum sc_touchmap_overlay_control control) {
         case SC_TOUCHMAP_OVERLAY_CONTROL_DEL:
             return (struct overlay_word) {
                 overlay_label_del, ARRAY_LEN(overlay_label_del),
-            };
-        case SC_TOUCHMAP_OVERLAY_CONTROL_BIND:
-            return (struct overlay_word) {
-                overlay_label_bind, ARRAY_LEN(overlay_label_bind),
             };
         case SC_TOUCHMAP_OVERLAY_CONTROL_QUIT:
             return (struct overlay_word) {
@@ -590,7 +582,6 @@ overlay_get_toolbar_button_rect(const SDL_Rect *content_rect,
     static const enum sc_touchmap_overlay_control controls[] = {
         SC_TOUCHMAP_OVERLAY_CONTROL_ADD,
         SC_TOUCHMAP_OVERLAY_CONTROL_DEL,
-        SC_TOUCHMAP_OVERLAY_CONTROL_BIND,
         SC_TOUCHMAP_OVERLAY_CONTROL_QUIT,
     };
 
@@ -668,7 +659,6 @@ draw_touchmap_toolbar(SDL_Renderer *renderer,
     static const enum sc_touchmap_overlay_control controls[] = {
         SC_TOUCHMAP_OVERLAY_CONTROL_ADD,
         SC_TOUCHMAP_OVERLAY_CONTROL_DEL,
-        SC_TOUCHMAP_OVERLAY_CONTROL_BIND,
         SC_TOUCHMAP_OVERLAY_CONTROL_QUIT,
     };
 
@@ -1148,7 +1138,6 @@ sc_touchmap_overlay_hit_control(struct sc_touchmap_overlay *overlay,
     static const enum sc_touchmap_overlay_control toolbar_items[] = {
         SC_TOUCHMAP_OVERLAY_CONTROL_ADD,
         SC_TOUCHMAP_OVERLAY_CONTROL_DEL,
-        SC_TOUCHMAP_OVERLAY_CONTROL_BIND,
         SC_TOUCHMAP_OVERLAY_CONTROL_QUIT,
     };
 

@@ -456,6 +456,31 @@ sc_touchmap_edit_mode_active(const struct sc_input_manager *im) {
         && sc_touchmap_overlay_is_edit_mode(&im->screen->display.overlay);
 }
 
+static bool
+sc_touchmap_selection_is_button(const struct sc_input_manager *im) {
+    struct sc_touchmap_editor_selection selection =
+        im->touchmap_editor.selection;
+    return (selection.target == SC_TOUCHMAP_EDITOR_TARGET_BUTTON_CENTER
+            || selection.target == SC_TOUCHMAP_EDITOR_TARGET_BUTTON_RADIUS)
+        && selection.button_index >= 0
+        && selection.button_index < im->game_touchmap->button_cnt;
+}
+
+static bool
+sc_touchmap_selection_is_walk(const struct sc_input_manager *im) {
+    struct sc_touchmap_editor_selection selection =
+        im->touchmap_editor.selection;
+    return (selection.target == SC_TOUCHMAP_EDITOR_TARGET_WALK_CENTER
+            || selection.target == SC_TOUCHMAP_EDITOR_TARGET_WALK_RADIUS)
+        && im->game_touchmap->has_walk;
+}
+
+static void
+sc_touchmap_mark_edited(struct sc_input_manager *im) {
+    im->touchmap_dirty = true;
+    sc_display_set_touchmap(&im->screen->display, im->game_touchmap);
+}
+
 static void
 sc_touchmap_release_active_touches(struct sc_input_manager *im) {
     struct sc_gptm_gamepad_touchmap *map = im->game_touchmap;
@@ -489,6 +514,123 @@ sc_touchmap_release_active_touches(struct sc_input_manager *im) {
 }
 
 static bool
+sc_touchmap_place_control(struct sc_input_manager *im, struct sc_point point) {
+    enum sc_touchmap_editor_mode mode =
+        sc_touchmap_editor_get_mode(&im->touchmap_editor);
+    struct sc_gptm_gamepad_touchmap *map = im->game_touchmap;
+
+    switch (mode) {
+        case SC_TOUCHMAP_EDITOR_MODE_PLACE_BUTTON: {
+            struct sc_gptm_touch_button button = {
+                .center = point,
+                .radius = 0,
+                .button = SC_GPTM_BUTTON_UNBOUND,
+                .is_skill = false,
+            };
+            int index = -1;
+            map = sc_gptm_gamepad_touchmap_add_button(map, &button, &index);
+            if (!map) {
+                return true;
+            }
+            im->game_touchmap = map;
+            sc_touchmap_editor_select_button(&im->touchmap_editor, index);
+            sc_touchmap_mark_edited(im);
+            return true;
+        }
+        case SC_TOUCHMAP_EDITOR_MODE_PLACE_SKILL: {
+            struct sc_gptm_touch_button skill = {
+                .center = point,
+                .radius = SC_TOUCHMAP_MIN_RADIUS,
+                .button = SC_GPTM_BUTTON_UNBOUND,
+                .is_skill = true,
+            };
+            int index = -1;
+            map = sc_gptm_gamepad_touchmap_add_button(map, &skill, &index);
+            if (!map) {
+                return true;
+            }
+            im->game_touchmap = map;
+            sc_touchmap_editor_select_button(&im->touchmap_editor, index);
+            sc_touchmap_mark_edited(im);
+            return true;
+        }
+        case SC_TOUCHMAP_EDITOR_MODE_PLACE_WALK:
+            if (!map->has_walk
+                    && sc_gptm_gamepad_touchmap_set_walk(
+                        map, point, SC_TOUCHMAP_MIN_RADIUS)) {
+                sc_touchmap_editor_select_walk(&im->touchmap_editor);
+                sc_touchmap_mark_edited(im);
+            } else {
+                sc_touchmap_editor_set_mode(&im->touchmap_editor,
+                                            SC_TOUCHMAP_EDITOR_MODE_SELECT);
+            }
+            return true;
+        case SC_TOUCHMAP_EDITOR_MODE_ADD_MENU:
+            sc_touchmap_editor_set_mode(&im->touchmap_editor,
+                                        SC_TOUCHMAP_EDITOR_MODE_SELECT);
+            im->screen->display.overlay.add_menu_open = false;
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool
+sc_touchmap_delete_selected_control(struct sc_input_manager *im) {
+    struct sc_gptm_gamepad_touchmap *map = im->game_touchmap;
+    if (sc_touchmap_selection_is_walk(im)) {
+        if (sc_gptm_gamepad_touchmap_remove_walk(map)) {
+            sc_touchmap_editor_clear_selection(&im->touchmap_editor);
+            sc_touchmap_mark_edited(im);
+        }
+        return true;
+    }
+
+    if (sc_touchmap_selection_is_button(im)) {
+        int old_index = im->touchmap_editor.selection.button_index;
+        int new_index = -1;
+        map = sc_gptm_gamepad_touchmap_remove_button(map, old_index,
+                                                     &new_index);
+        if (map) {
+            im->game_touchmap = map;
+            sc_touchmap_editor_select_after_button_remove(
+                &im->touchmap_editor, map, new_index);
+            sc_touchmap_mark_edited(im);
+        }
+        return true;
+    }
+
+    return true;
+}
+
+static bool
+sc_touchmap_capture_binding(struct sc_input_manager *im, uint8_t button) {
+    if (!sc_touchmap_edit_mode_active(im)) {
+        return false;
+    }
+
+    enum sc_touchmap_editor_mode mode =
+        sc_touchmap_editor_get_mode(&im->touchmap_editor);
+    if (mode != SC_TOUCHMAP_EDITOR_MODE_SELECT) {
+        return false;
+    }
+
+    bool captured = false;
+    if (sc_touchmap_selection_is_button(im)) {
+        int index = im->touchmap_editor.selection.button_index;
+        int new_index = -1;
+        if (sc_gptm_gamepad_touchmap_bind_button(im->game_touchmap, index,
+                                                 button, &new_index)) {
+            sc_touchmap_editor_select_button(&im->touchmap_editor, new_index);
+            sc_touchmap_mark_edited(im);
+            captured = true;
+        }
+    }
+
+    return captured;
+}
+
+static bool
 sc_touchmap_toggle_edit_mode(struct sc_input_manager *im, int32_t x, int32_t y) {
     if (!sc_touchmap_overlay_is_enabled(&im->screen->display.overlay)) {
         return false;
@@ -512,16 +654,38 @@ sc_touchmap_toggle_edit_mode(struct sc_input_manager *im, int32_t x, int32_t y) 
             sc_touchmap_release_active_touches(im);
             sc_touchmap_overlay_set_edit_mode(&im->screen->display.overlay,
                                               true);
+            sc_touchmap_editor_set_mode(&im->touchmap_editor,
+                                        SC_TOUCHMAP_EDITOR_MODE_SELECT);
             return true;
         case SC_TOUCHMAP_OVERLAY_CONTROL_ADD:
+            sc_touchmap_editor_set_mode(
+                &im->touchmap_editor,
+                im->screen->display.overlay.add_menu_open
+                    ? SC_TOUCHMAP_EDITOR_MODE_ADD_MENU
+                    : SC_TOUCHMAP_EDITOR_MODE_SELECT);
+            return true;
         case SC_TOUCHMAP_OVERLAY_CONTROL_DEL:
-        case SC_TOUCHMAP_OVERLAY_CONTROL_BIND:
+            sc_touchmap_delete_selected_control(im);
+            return true;
         case SC_TOUCHMAP_OVERLAY_CONTROL_ADD_BUTTON:
+            sc_touchmap_editor_set_mode(&im->touchmap_editor,
+                                        SC_TOUCHMAP_EDITOR_MODE_PLACE_BUTTON);
+            return true;
         case SC_TOUCHMAP_OVERLAY_CONTROL_ADD_SKILL:
+            sc_touchmap_editor_set_mode(&im->touchmap_editor,
+                                        SC_TOUCHMAP_EDITOR_MODE_PLACE_SKILL);
+            return true;
         case SC_TOUCHMAP_OVERLAY_CONTROL_ADD_WALK:
+            sc_touchmap_editor_set_mode(
+                &im->touchmap_editor,
+                im->game_touchmap && im->game_touchmap->has_walk
+                    ? SC_TOUCHMAP_EDITOR_MODE_SELECT
+                    : SC_TOUCHMAP_EDITOR_MODE_PLACE_WALK);
             return true;
         case SC_TOUCHMAP_OVERLAY_CONTROL_QUIT:
             assert(im->game_touchmap);
+            sc_touchmap_editor_set_mode(&im->touchmap_editor,
+                                        SC_TOUCHMAP_EDITOR_MODE_SELECT);
             break;
         default:
             return true;
@@ -727,6 +891,23 @@ sc_input_manager_process_touchmap_edit_key(struct sc_input_manager *im,
     }
 
     SDL_Keycode sdl_keycode = event->keysym.sym;
+    if (sdl_keycode == SDLK_ESCAPE) {
+        bool pending =
+            sc_touchmap_editor_get_mode(&im->touchmap_editor)
+                != SC_TOUCHMAP_EDITOR_MODE_SELECT
+            || im->screen->display.overlay.add_menu_open;
+        if (!pending) {
+            return false;
+        }
+
+        if (event->type == SDL_KEYDOWN && !event->repeat) {
+            sc_touchmap_editor_set_mode(&im->touchmap_editor,
+                                        SC_TOUCHMAP_EDITOR_MODE_SELECT);
+            im->screen->display.overlay.add_menu_open = false;
+        }
+        return true;
+    }
+
     if (sdl_keycode != SDLK_LEFT && sdl_keycode != SDLK_RIGHT
             && sdl_keycode != SDLK_UP && sdl_keycode != SDLK_DOWN) {
         return false;
@@ -1232,8 +1413,10 @@ sc_input_manager_process_mouse_button(struct sc_input_manager *im,
         if (down && event->button == SDL_BUTTON_LEFT) {
             struct sc_point point = sc_screen_convert_window_to_frame_coords(
                 im->screen, event->x, event->y);
-            if (!sc_touchmap_editor_try_start_drag(&im->touchmap_editor,
-                                                   im->game_touchmap, point)) {
+            if (sc_touchmap_place_control(im, point)) {
+                im->touchmap_consume_left_button_up = true;
+            } else if (!sc_touchmap_editor_try_start_drag(
+                           &im->touchmap_editor, im->game_touchmap, point)) {
                 im->touchmap_consume_left_button_up = true;
             }
         }
@@ -1744,11 +1927,18 @@ sc_input_manager_handle_event(struct sc_input_manager *im,
             sc_input_manager_process_gamepad_device(im, &event->cdevice);
             break;
         case SDL_CONTROLLERAXISMOTION:
-            if (!im->gp || paused) {
+            if (sc_touchmap_edit_mode_active(im)) {
+                if ((event->caxis.axis == SDL_CONTROLLER_AXIS_TRIGGERLEFT
+                        || event->caxis.axis
+                            == SDL_CONTROLLER_AXIS_TRIGGERRIGHT)
+                        && event->caxis.value > SDL_MAX_SINT16 / 2) {
+                    sc_touchmap_capture_binding(
+                        im, SDL_CONTROLLER_BUTTON_MAX + event->caxis.axis);
+                }
                 break;
             }
 
-            if (sc_touchmap_edit_mode_active(im)) {
+            if (!im->gp || paused) {
                 break;
             }
 
@@ -1781,11 +1971,14 @@ sc_input_manager_handle_event(struct sc_input_manager *im,
             break;
         case SDL_CONTROLLERBUTTONDOWN:
         case SDL_CONTROLLERBUTTONUP:
-            if (!im->gp || paused) {
+            if (sc_touchmap_edit_mode_active(im)) {
+                if (event->cbutton.state == SDL_PRESSED) {
+                    sc_touchmap_capture_binding(im, event->cbutton.button);
+                }
                 break;
             }
 
-            if (sc_touchmap_edit_mode_active(im)) {
+            if (!im->gp || paused) {
                 break;
             }
 

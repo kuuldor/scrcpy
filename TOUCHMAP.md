@@ -266,9 +266,8 @@ Minimum radius:
 
 Planned add/remove workflow:
 
-- Edit mode should show a floating toolbar on top of the overlay with `ADD`,
-  `DEL`, `BIND`, and `QUIT` buttons. The current top-right `QUIT` button should
-  move into this toolbar.
+- Edit mode shows a floating toolbar on top of the overlay with `ADD`, `DEL`,
+  and `QUIT` buttons. The old top-right `QUIT` button moved into this toolbar.
 - `ADD` opens a dropdown menu with `Button`, `Skill`, and `Walk`.
 - Choosing `Button`, `Skill`, or `Walk` starts placement mode for that control
   type. The next click on the overlay places the control at that frame
@@ -277,15 +276,15 @@ Planned add/remove workflow:
 - The touchmap may have zero or one walk control. This supports building a
   mapping from an empty file.
 - `DEL` removes the currently selected control, including Walk.
-- `BIND` starts gamepad binding capture for the currently selected button or
-  skill mapping. Walk is not bindable while walk-stick behavior remains
-  hard-coded.
+- Selecting a button or skill mapping in edit mode makes it listen for the next
+  gamepad button or trigger press. Walk is not bindable while walk-stick
+  behavior remains hard-coded.
 - New button and skill controls may initially have no binding. No-binding
   controls are shown in red to warn the user.
-- During binding capture, the next gamepad button or trigger press is assigned
-  to the selected button or skill mapping.
-- Binding capture is shared by new controls and existing controls, so adding a
-  new binding and rebinding use the same workflow.
+- In edit mode, the next gamepad button or trigger press is assigned to the
+  selected button or skill mapping.
+- Direct selected binding is shared by new controls and existing controls, so
+  adding a new binding and rebinding use the same workflow.
 - Binding to an input already used by another mapping is allowed. The currently
   selected mapping gets the binding, and the old mapping loses its binding.
 - Saving is disallowed while any button or skill mapping has no binding. The
@@ -378,13 +377,14 @@ These decisions were agreed for the next implementation passes:
 - The editor should show selection state.
 - Keyboard nudging is supported for selected controls in edit mode. Gamepad
   nudging is not planned.
-- Add/remove should be driven by a floating toolbar with `ADD`, `DEL`, `BIND`,
-  and `QUIT`. `ADD` uses a dropdown for `Button`, `Skill`, and `Walk`.
+- Add/remove should be driven by a floating toolbar with `ADD`, `DEL`, and
+  `QUIT`. `ADD` uses a dropdown for `Button`, `Skill`, and `Walk`.
 - A touchmap may contain zero or one walk control. Walk can be added or deleted,
   but only when no other Walk exists.
 - Empty touchmaps can be created in memory and edited, then saved through Save
   As.
-- Binding capture is shared by newly added controls and existing controls.
+- Direct selected binding is shared by newly added controls and existing
+  controls.
 - Button and skill mappings may temporarily have no binding, must render red,
   and must block saving until resolved.
 - Rebinding to an input used by another mapping transfers the binding to the
@@ -456,24 +456,23 @@ Use this list to track future work. Implement one item at a time.
   - [x] Update editor selection after add/remove. Added controls should become
     selected. Removed controls should clear selection or select a nearby
     remaining control.
-  - [x] Add editor toolbar rendering with `ADD`, `DEL`, `BIND`, and `QUIT`.
+  - [x] Add editor toolbar rendering with `ADD`, `DEL`, and `QUIT`.
   - [x] Move the existing `QUIT` edit control into the toolbar.
   - [x] Add `ADD` dropdown rendering and hit-testing for `Button`, `Skill`, and
     `Walk`.
   - [x] Gray out `Walk` in the `ADD` dropdown when a walk control already
     exists.
-  - [ ] Add editor mode state for select, add menu, place button, place skill,
-    place walk, and capture binding.
-  - [ ] Place new controls at the next overlay click coordinate after choosing
+  - [x] Add editor mode state for select, add menu, place button, place skill,
+    and place walk.
+  - [x] Place new controls at the next overlay click coordinate after choosing
     a type from the `ADD` dropdown.
-  - [ ] Capture the next gamepad button or trigger press during binding capture
-    and apply it to the selected button or skill.
-  - [ ] Make `Esc` cancel pending add placement or binding capture.
-  - [ ] Make `DEL` remove the currently selected control, including Walk.
-  - [ ] Make `BIND` enter binding capture for the selected button or skill.
-  - [ ] Refresh the display touchmap pointer after any add/remove operation that
+  - [x] Bind the next gamepad button or trigger press to the selected button or
+    skill.
+  - [x] Make `Esc` cancel pending add placement.
+  - [x] Make `DEL` remove the currently selected control, including Walk.
+  - [x] Refresh the display touchmap pointer after any add/remove operation that
     changes the map allocation.
-  - [ ] Mark the touchmap dirty only after successful add/remove/bind mutation.
+  - [x] Mark the touchmap dirty only after successful add/remove/bind mutation.
   - [ ] Add focused tests for empty maps, optional Walk, append/remove, binding
     transfer, no-binding save rejection, sorting, selection updates, and JSON
     output after saving added controls. Empty maps, optional Walk,
