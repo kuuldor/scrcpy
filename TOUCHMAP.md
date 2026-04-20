@@ -288,7 +288,9 @@ Planned add/remove workflow:
   new binding and rebinding use the same workflow.
 - Binding to an input already used by another mapping is allowed. The currently
   selected mapping gets the binding, and the old mapping loses its binding.
-- Saving is disallowed while any button or skill mapping has no binding.
+- Saving is disallowed while any button or skill mapping has no binding. The
+  UI shows a warning dialog and keeps edit mode open so the user can bind the
+  red controls.
 - `Esc` cancels the pending add operation.
 - New regular button mappings use radius `0`.
 - New skill mappings use radius `SC_TOUCHMAP_MIN_RADIUS`.
@@ -443,15 +445,15 @@ Use this list to track future work. Implement one item at a time.
     `json_entry == NULL` until the next successful save relinks entries.
   - [x] Support no-binding button/skill mappings as temporary editor state.
   - [x] Render no-binding button/skill mappings in red.
-  - [ ] Disallow saving while any button/skill mapping has no binding.
-  - [ ] When binding to an already used gamepad input, transfer the binding to
+  - [x] Disallow saving while any button/skill mapping has no binding.
+  - [x] When binding to an already used gamepad input, transfer the binding to
     the selected mapping and clear the old mapping's binding.
   - [x] Assign stable virtual finger ids for newly added controls without
     colliding with existing walk/button ids.
   - [x] Re-sort bound entries after add/remove/bind because runtime button
     lookup depends on sorted buttons.
-  - [ ] Ensure runtime lookup ignores no-binding mappings.
-  - [ ] Update editor selection after add/remove. Added controls should become
+  - [x] Ensure runtime lookup ignores no-binding mappings.
+  - [x] Update editor selection after add/remove. Added controls should become
     selected. Removed controls should clear selection or select a nearby
     remaining control.
   - [x] Add editor toolbar rendering with `ADD`, `DEL`, `BIND`, and `QUIT`.
@@ -475,9 +477,9 @@ Use this list to track future work. Implement one item at a time.
   - [ ] Add focused tests for empty maps, optional Walk, append/remove, binding
     transfer, no-binding save rejection, sorting, selection updates, and JSON
     output after saving added controls. Empty maps, optional Walk,
-    append/remove helpers, no-binding representation, sorting, metadata
-    preservation, and JSON output are covered; binding transfer, save
-    rejection, and selection updates remain.
+    append/remove helpers, no-binding representation, no-binding save
+    rejection, binding transfer, sorting, metadata preservation, and JSON
+    output, and editor selection updates are covered.
 
 ### Deferred Runtime Configuration
 

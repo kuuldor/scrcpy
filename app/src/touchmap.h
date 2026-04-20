@@ -51,6 +51,14 @@ struct sc_gptm_gamepad_touchmap {
 
 struct sc_gptm_gamepad_touchmap *sc_gptm_gamepad_touchmap_new_empty(void);
 bool sc_gptm_touch_button_is_bound(const struct sc_gptm_touch_button *button);
+struct sc_gptm_touch_button *
+sc_gptm_gamepad_touchmap_find_button(struct sc_gptm_gamepad_touchmap *map,
+                                     uint8_t button);
+bool sc_gptm_gamepad_touchmap_has_unbound_buttons(
+    const struct sc_gptm_gamepad_touchmap *map);
+bool sc_gptm_gamepad_touchmap_bind_button(struct sc_gptm_gamepad_touchmap *map,
+                                          int index, uint8_t button,
+                                          int *out_index);
 bool sc_gptm_gamepad_touchmap_set_walk(struct sc_gptm_gamepad_touchmap *map,
                                        struct sc_point center,
                                        int32_t radius);

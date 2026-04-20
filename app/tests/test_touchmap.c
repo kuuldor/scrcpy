@@ -274,6 +274,7 @@ test_empty_touchmap_create_save(void) {
 static void
 test_touchmap_mutation_helpers(void) {
     const char *output_path = "test_touchmap_mutation_output.json";
+    remove(output_path);
 
     struct sc_gptm_gamepad_touchmap *map =
         sc_gptm_gamepad_touchmap_new_empty();
@@ -308,6 +309,10 @@ test_touchmap_mutation_helpers(void) {
     assert(map->buttons[0].current_pos.x == 300);
     assert(map->buttons[0].finger_id == SC_GPTM_BASE_FINGER_ID);
     assert(sc_gptm_touch_button_is_bound(&map->buttons[0]));
+    assert(sc_gptm_gamepad_touchmap_find_button(
+        map, SDL_CONTROLLER_BUTTON_B) == &map->buttons[0]);
+    assert(!sc_gptm_gamepad_touchmap_find_button(
+        map, SC_GPTM_BUTTON_UNBOUND));
 
     struct sc_gptm_touch_button button_a = {
         .center = {100, 200},
@@ -335,15 +340,33 @@ test_touchmap_mutation_helpers(void) {
     assert(map->buttons[2].button == SC_GPTM_BUTTON_UNBOUND);
     assert(map->buttons[2].radius == 75);
     assert(!sc_gptm_touch_button_is_bound(&map->buttons[2]));
+    assert(!sc_gptm_gamepad_touchmap_find_button(
+        map, SC_GPTM_BUTTON_UNBOUND));
+
+    int bound_index = -1;
+    assert(sc_gptm_gamepad_touchmap_bind_button(
+        map, 2, SDL_CONTROLLER_BUTTON_B, &bound_index));
+    assert(bound_index == 1);
+    assert(map->buttons[0].button == SDL_CONTROLLER_BUTTON_A);
+    assert(map->buttons[1].button == SDL_CONTROLLER_BUTTON_B);
+    assert(map->buttons[1].is_skill);
+    assert(map->buttons[2].button == SC_GPTM_BUTTON_UNBOUND);
+    assert(!map->buttons[2].is_skill);
+
+    assert(!save_touchmap_config(output_path, map));
+    assert(!read_file(output_path));
 
     int next_index = -2;
-    map = sc_gptm_gamepad_touchmap_remove_button(map, 1, &next_index);
+    map = sc_gptm_gamepad_touchmap_remove_button(map, 2, &next_index);
     assert(map);
     assert(map->button_cnt == 2);
     assert(next_index == 1);
     assert(map->buttons[0].button == SDL_CONTROLLER_BUTTON_A);
-    assert(map->buttons[1].button == SC_GPTM_BUTTON_UNBOUND);
+    assert(map->buttons[1].button == SDL_CONTROLLER_BUTTON_B);
 
+    assert(sc_gptm_gamepad_touchmap_bind_button(
+        map, 1, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER, &bound_index));
+    assert(bound_index == 1);
     assert(save_touchmap_config(output_path, map));
 
     char *saved = read_file(output_path);
@@ -362,7 +385,7 @@ test_touchmap_mutation_helpers(void) {
 
     cJSON *skills = get_path(root, "mappings", "skill_casting");
     assert(cJSON_GetArraySize(skills) == 1);
-    assert(find_mapping(skills, "UNKNOWN"));
+    assert(find_mapping(skills, "RB"));
 
     cJSON_Delete(root);
     free(saved);
@@ -463,6 +486,22 @@ test_editor_keyboard_nudging(void) {
     editor.selection.button_index = 1;
     assert(sc_touchmap_editor_nudge_selection(&editor, map, 0, 0, 10));
     assert(map->buttons[1].radius == 60);
+
+    sc_touchmap_editor_select_button(&editor, 0);
+    assert(editor.selection.target == SC_TOUCHMAP_EDITOR_TARGET_BUTTON_CENTER);
+    assert(editor.selection.button_index == 0);
+
+    sc_touchmap_editor_select_walk(&editor);
+    assert(editor.selection.target == SC_TOUCHMAP_EDITOR_TARGET_WALK_CENTER);
+    assert(editor.selection.button_index == -1);
+
+    sc_touchmap_editor_select_after_button_remove(&editor, map, 1);
+    assert(editor.selection.target == SC_TOUCHMAP_EDITOR_TARGET_BUTTON_CENTER);
+    assert(editor.selection.button_index == 1);
+
+    sc_touchmap_editor_select_after_button_remove(&editor, map, -1);
+    assert(editor.selection.target == SC_TOUCHMAP_EDITOR_TARGET_NONE);
+    assert(editor.selection.button_index == -1);
 
     sc_gptm_gamepad_touchmap_destroy(map);
 }

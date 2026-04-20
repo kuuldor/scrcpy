@@ -152,6 +152,20 @@ sc_gptm_touch_button_is_bound(const struct sc_gptm_touch_button *button) {
     return button && button->button != SC_GPTM_BUTTON_UNBOUND;
 }
 
+struct sc_gptm_touch_button *
+sc_gptm_gamepad_touchmap_find_button(struct sc_gptm_gamepad_touchmap *map,
+                                     uint8_t button) {
+    if (!map || button == SC_GPTM_BUTTON_UNBOUND) {
+        return NULL;
+    }
+
+    struct sc_gptm_touch_button key = {.button = button};
+    struct sc_gptm_touch_button *touch_btn =
+        bsearch(&key, map->buttons, map->button_cnt,
+                sizeof(struct sc_gptm_touch_button), sc_gptm_compare_btn);
+    return sc_gptm_touch_button_is_bound(touch_btn) ? touch_btn : NULL;
+}
+
 bool
 sc_gptm_gamepad_touchmap_set_walk(struct sc_gptm_gamepad_touchmap *map,
                                   struct sc_point center, int32_t radius) {
@@ -494,6 +508,58 @@ update_touchmap_json_root(struct sc_gptm_gamepad_touchmap *map) {
     return true;
 }
 
+bool
+sc_gptm_gamepad_touchmap_has_unbound_buttons(
+        const struct sc_gptm_gamepad_touchmap *map) {
+    if (!map) {
+        return false;
+    }
+
+    for (int i = 0; i < map->button_cnt; ++i) {
+        if (!sc_gptm_touch_button_is_bound(&map->buttons[i])) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool
+sc_gptm_gamepad_touchmap_bind_button(struct sc_gptm_gamepad_touchmap *map,
+                                     int index, uint8_t button,
+                                     int *out_index) {
+    if (!map || index < 0 || index >= map->button_cnt
+            || button == SC_GPTM_BUTTON_UNBOUND) {
+        return false;
+    }
+
+    uint64_t selected_finger_id = map->buttons[index].finger_id;
+    for (int i = 0; i < map->button_cnt; ++i) {
+        if (i != index && map->buttons[i].button == button) {
+            map->buttons[i].button = SC_GPTM_BUTTON_UNBOUND;
+            map->buttons[i].json_entry = NULL;
+        }
+    }
+
+    map->buttons[index].button = button;
+    map->buttons[index].json_entry = NULL;
+
+    qsort(map->buttons, map->button_cnt, sizeof(struct sc_gptm_touch_button),
+          sc_gptm_compare_btn);
+
+    if (out_index) {
+        *out_index = -1;
+        for (int i = 0; i < map->button_cnt; ++i) {
+            if (map->buttons[i].finger_id == selected_finger_id) {
+                *out_index = i;
+                break;
+            }
+        }
+    }
+
+    return true;
+}
+
 struct sc_gptm_gamepad_touchmap * parse_touchmap_config(const char *filename) {
     if (filename == NULL) {
         LOGE("No touchmap file defined");
@@ -646,6 +712,11 @@ save_touchmap_config(const char *filename,
                      struct sc_gptm_gamepad_touchmap *map) {
     if (!filename || !map) {
         LOGE("No touchmap to save");
+        return false;
+    }
+
+    if (sc_gptm_gamepad_touchmap_has_unbound_buttons(map)) {
+        LOGE("Cannot save touchmap with unbound button mappings");
         return false;
     }
 

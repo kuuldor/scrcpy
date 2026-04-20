@@ -682,6 +682,18 @@ save_touchmap_file(struct sc_input_manager *im, const char *filename) {
         return;
     }
 
+    if (sc_gptm_gamepad_touchmap_has_unbound_buttons(im->game_touchmap)) {
+        tinyfd_messageBox(
+            "Cannot Save Touch Map",
+            "Some touchmap controls are not bound to a gamepad input.\n\n"
+            "Bind every red control before saving.",
+            "ok",
+            "warning",
+            1);
+        im->touchmap_exit_after_save = false;
+        return;
+    }
+
     char *filename_dup = SDL_strdup(filename);
     if (!filename_dup) {
         LOG_OOM();
@@ -1564,9 +1576,8 @@ sc_handle_touchmap_button(struct sc_input_manager *im, uint8_t button, uint8_t s
     }
 
     struct sc_gptm_gamepad_touchmap * map = im->game_touchmap;
-    struct sc_gptm_touch_button key = {.button = button};
-    struct sc_gptm_touch_button * touch_btn = bsearch(&key, map->buttons, map->button_cnt, 
-                    sizeof(struct sc_gptm_touch_button), sc_gptm_compare_btn);
+    struct sc_gptm_touch_button *touch_btn =
+        sc_gptm_gamepad_touchmap_find_button(map, button);
     if (touch_btn == NULL) {
         LOGE("Button %d not found in touch map", button);
         return;

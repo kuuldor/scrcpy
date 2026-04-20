@@ -36,6 +36,22 @@ sc_touchmap_editor_reset(struct sc_touchmap_editor *editor);
 void
 sc_touchmap_editor_reset_drag(struct sc_touchmap_editor *editor);
 
+void
+sc_touchmap_editor_clear_selection(struct sc_touchmap_editor *editor);
+
+void
+sc_touchmap_editor_select_walk(struct sc_touchmap_editor *editor);
+
+void
+sc_touchmap_editor_select_button(struct sc_touchmap_editor *editor,
+                                 int button_index);
+
+void
+sc_touchmap_editor_select_after_button_remove(
+    struct sc_touchmap_editor *editor,
+    const struct sc_gptm_gamepad_touchmap *map,
+    int button_index);
+
 bool
 sc_touchmap_editor_is_dragging(const struct sc_touchmap_editor *editor);
 

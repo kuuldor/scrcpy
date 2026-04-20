@@ -27,6 +27,45 @@ sc_touchmap_editor_reset_drag(struct sc_touchmap_editor *editor) {
     sc_touchmap_editor_selection_reset(&editor->drag);
 }
 
+void
+sc_touchmap_editor_clear_selection(struct sc_touchmap_editor *editor) {
+    sc_touchmap_editor_selection_reset(&editor->selection);
+    sc_touchmap_editor_reset_drag(editor);
+}
+
+void
+sc_touchmap_editor_select_walk(struct sc_touchmap_editor *editor) {
+    sc_touchmap_editor_reset_drag(editor);
+    editor->selection.target = SC_TOUCHMAP_EDITOR_TARGET_WALK_CENTER;
+    editor->selection.button_index = -1;
+}
+
+void
+sc_touchmap_editor_select_button(struct sc_touchmap_editor *editor,
+                                 int button_index) {
+    sc_touchmap_editor_reset_drag(editor);
+    if (button_index < 0) {
+        sc_touchmap_editor_selection_reset(&editor->selection);
+        return;
+    }
+
+    editor->selection.target = SC_TOUCHMAP_EDITOR_TARGET_BUTTON_CENTER;
+    editor->selection.button_index = button_index;
+}
+
+void
+sc_touchmap_editor_select_after_button_remove(
+        struct sc_touchmap_editor *editor,
+        const struct sc_gptm_gamepad_touchmap *map,
+        int button_index) {
+    if (!map || button_index < 0 || button_index >= map->button_cnt) {
+        sc_touchmap_editor_clear_selection(editor);
+        return;
+    }
+
+    sc_touchmap_editor_select_button(editor, button_index);
+}
+
 bool
 sc_touchmap_editor_is_dragging(const struct sc_touchmap_editor *editor) {
     return editor->dragging;
