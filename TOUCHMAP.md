@@ -454,11 +454,11 @@ Use this list to track future work. Implement one item at a time.
   - [ ] Update editor selection after add/remove. Added controls should become
     selected. Removed controls should clear selection or select a nearby
     remaining control.
-  - [ ] Add editor toolbar rendering with `ADD`, `DEL`, `BIND`, and `QUIT`.
-  - [ ] Move the existing `QUIT` edit control into the toolbar.
-  - [ ] Add `ADD` dropdown rendering and hit-testing for `Button`, `Skill`, and
+  - [x] Add editor toolbar rendering with `ADD`, `DEL`, `BIND`, and `QUIT`.
+  - [x] Move the existing `QUIT` edit control into the toolbar.
+  - [x] Add `ADD` dropdown rendering and hit-testing for `Button`, `Skill`, and
     `Walk`.
-  - [ ] Gray out `Walk` in the `ADD` dropdown when a walk control already
+  - [x] Gray out `Walk` in the `ADD` dropdown when a walk control already
     exists.
   - [ ] Add editor mode state for select, add menu, place button, place skill,
     place walk, and capture binding.

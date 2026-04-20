@@ -14,6 +14,19 @@
 // Forward declaration to avoid circular includes
 struct sc_touchmap_overlay;
 
+enum sc_touchmap_overlay_control {
+    SC_TOUCHMAP_OVERLAY_CONTROL_NONE,
+    SC_TOUCHMAP_OVERLAY_CONTROL_NEW,
+    SC_TOUCHMAP_OVERLAY_CONTROL_EDIT,
+    SC_TOUCHMAP_OVERLAY_CONTROL_ADD,
+    SC_TOUCHMAP_OVERLAY_CONTROL_DEL,
+    SC_TOUCHMAP_OVERLAY_CONTROL_BIND,
+    SC_TOUCHMAP_OVERLAY_CONTROL_QUIT,
+    SC_TOUCHMAP_OVERLAY_CONTROL_ADD_BUTTON,
+    SC_TOUCHMAP_OVERLAY_CONTROL_ADD_SKILL,
+    SC_TOUCHMAP_OVERLAY_CONTROL_ADD_WALK,
+};
+
 // Color constants for the overlay (RGBA)
 #define SC_OVERLAY_WALK_COLOR       0xFFFFFF40  // White, low opacity
 #define SC_OVERLAY_BUTTON_COLOR     0x6BFF6B55  // Stronger green tint
@@ -103,6 +116,12 @@ sc_touchmap_overlay_is_edit_mode(const struct sc_touchmap_overlay *overlay);
 SDL_Rect
 sc_touchmap_overlay_get_edit_button_rect(const SDL_Rect *content_rect,
                                          bool edit_mode);
+
+enum sc_touchmap_overlay_control
+sc_touchmap_overlay_hit_control(struct sc_touchmap_overlay *overlay,
+                                const struct sc_gptm_gamepad_touchmap *touchmap,
+                                const SDL_Rect *content_rect,
+                                int32_t x, int32_t y);
 
 #ifdef SC_TEST
 struct sc_point

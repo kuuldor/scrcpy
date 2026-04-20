@@ -489,22 +489,42 @@ sc_touchmap_release_active_touches(struct sc_input_manager *im) {
 }
 
 static bool
-sc_touchmap_point_in_rect(int32_t x, int32_t y, const SDL_Rect *rect) {
-    return x >= rect->x && x < rect->x + rect->w
-        && y >= rect->y && y < rect->y + rect->h;
-}
-
-static bool
 sc_touchmap_toggle_edit_mode(struct sc_input_manager *im, int32_t x, int32_t y) {
     if (!sc_touchmap_overlay_is_enabled(&im->screen->display.overlay)) {
         return false;
     }
 
-    SDL_Rect rect = sc_touchmap_overlay_get_edit_button_rect(
-        &im->screen->rect,
-        sc_touchmap_overlay_is_edit_mode(&im->screen->display.overlay));
-    if (!sc_touchmap_point_in_rect(x, y, &rect)) {
+    enum sc_touchmap_overlay_control control =
+        sc_touchmap_overlay_hit_control(&im->screen->display.overlay,
+                                        im->game_touchmap, &im->screen->rect,
+                                        x, y);
+    if (control == SC_TOUCHMAP_OVERLAY_CONTROL_NONE) {
         return false;
+    }
+
+    switch (control) {
+        case SC_TOUCHMAP_OVERLAY_CONTROL_NEW:
+            assert(!im->game_touchmap);
+            create_empty_touchmap(im);
+            return true;
+        case SC_TOUCHMAP_OVERLAY_CONTROL_EDIT:
+            assert(im->game_touchmap);
+            sc_touchmap_release_active_touches(im);
+            sc_touchmap_overlay_set_edit_mode(&im->screen->display.overlay,
+                                              true);
+            return true;
+        case SC_TOUCHMAP_OVERLAY_CONTROL_ADD:
+        case SC_TOUCHMAP_OVERLAY_CONTROL_DEL:
+        case SC_TOUCHMAP_OVERLAY_CONTROL_BIND:
+        case SC_TOUCHMAP_OVERLAY_CONTROL_ADD_BUTTON:
+        case SC_TOUCHMAP_OVERLAY_CONTROL_ADD_SKILL:
+        case SC_TOUCHMAP_OVERLAY_CONTROL_ADD_WALK:
+            return true;
+        case SC_TOUCHMAP_OVERLAY_CONTROL_QUIT:
+            assert(im->game_touchmap);
+            break;
+        default:
+            return true;
     }
 
     if (!im->game_touchmap) {
@@ -512,12 +532,7 @@ sc_touchmap_toggle_edit_mode(struct sc_input_manager *im, int32_t x, int32_t y) 
         return true;
     }
 
-    bool edit_mode = sc_touchmap_overlay_is_edit_mode(&im->screen->display.overlay);
-    if (!edit_mode) {
-        sc_touchmap_release_active_touches(im);
-        sc_touchmap_overlay_set_edit_mode(&im->screen->display.overlay, true);
-        return true;
-    }
+    assert(sc_touchmap_overlay_is_edit_mode(&im->screen->display.overlay));
 
     if (!im->touchmap_dirty) {
         im->touchmap_exit_after_save = false;
