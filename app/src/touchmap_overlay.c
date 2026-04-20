@@ -1011,7 +1011,9 @@ sc_touchmap_overlay_render(struct sc_touchmap_overlay *overlay,
     // Draw button mappings
     for (int i = 0; i < touchmap->button_cnt; ++i) {
         const struct sc_gptm_touch_button *btn = &touchmap->buttons[i];
-        uint32_t color = btn->is_skill ? SC_OVERLAY_SKILL_COLOR
+        bool bound = sc_gptm_touch_button_is_bound(btn);
+        uint32_t color = !bound ? SC_OVERLAY_UNBOUND_COLOR
+                       : btn->is_skill ? SC_OVERLAY_SKILL_COLOR
                                        : SC_OVERLAY_BUTTON_COLOR;
 
         struct sc_point btn_center = sc_touchmap_overlay_transform_point(
@@ -1024,7 +1026,8 @@ sc_touchmap_overlay_render(struct sc_touchmap_overlay *overlay,
                           color);
 
         // Draw outline circle (solid)
-        uint32_t outline_color = btn->is_skill ? 0xFFFFFFC0 : 0xFFFFFFA0;
+        uint32_t outline_color = !bound ? 0xFF3434FF
+                               : btn->is_skill ? 0xFFFFFFC0 : 0xFFFFFFA0;
         draw_circle_outline(renderer, btn_center.x, btn_center.y,
                            button_radius,
                            outline_color);

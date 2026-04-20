@@ -245,6 +245,8 @@ test_empty_touchmap_create_save(void) {
     struct sc_gptm_gamepad_touchmap *map =
         sc_gptm_gamepad_touchmap_new_empty();
     assert(map);
+    assert(cJSON_AddStringToObject(map->json_root, "packageName",
+                                   "mutation.game"));
     assert(!map->has_walk);
     assert(map->button_cnt == 0);
 
@@ -262,6 +264,105 @@ test_empty_touchmap_create_save(void) {
         cJSON_GetObjectItemCaseSensitive(mappings, "button_mappings")));
     assert(cJSON_IsArray(
         cJSON_GetObjectItemCaseSensitive(mappings, "skill_casting")));
+
+    cJSON_Delete(root);
+    free(saved);
+    sc_gptm_gamepad_touchmap_destroy(map);
+    remove(output_path);
+}
+
+static void
+test_touchmap_mutation_helpers(void) {
+    const char *output_path = "test_touchmap_mutation_output.json";
+
+    struct sc_gptm_gamepad_touchmap *map =
+        sc_gptm_gamepad_touchmap_new_empty();
+    assert(map);
+    assert(cJSON_AddStringToObject(map->json_root, "packageName",
+                                   "mutation.game"));
+
+    assert(sc_gptm_gamepad_touchmap_set_walk(
+        map, (struct sc_point) {100, 200}, 10));
+    assert(map->has_walk);
+    assert(map->walk.center.x == 100);
+    assert(map->walk.center.y == 200);
+    assert(map->walk.radius == SC_TOUCHMAP_MIN_RADIUS);
+    assert(map->walk.finger_id == SC_GPTM_BASE_FINGER_ID);
+
+    assert(sc_gptm_gamepad_touchmap_remove_walk(map));
+    assert(!map->has_walk);
+    assert(!sc_gptm_gamepad_touchmap_remove_walk(map));
+
+    int index = -1;
+    struct sc_gptm_touch_button button_b = {
+        .center = {300, 400},
+        .button = SDL_CONTROLLER_BUTTON_B,
+        .is_skill = false,
+    };
+    map = sc_gptm_gamepad_touchmap_add_button(map, &button_b, &index);
+    assert(map);
+    assert(index == 0);
+    assert(map->button_cnt == 1);
+    assert(map->buttons[0].button == SDL_CONTROLLER_BUTTON_B);
+    assert(map->buttons[0].center.x == 300);
+    assert(map->buttons[0].current_pos.x == 300);
+    assert(map->buttons[0].finger_id == SC_GPTM_BASE_FINGER_ID);
+    assert(sc_gptm_touch_button_is_bound(&map->buttons[0]));
+
+    struct sc_gptm_touch_button button_a = {
+        .center = {100, 200},
+        .button = SDL_CONTROLLER_BUTTON_A,
+        .is_skill = false,
+    };
+    map = sc_gptm_gamepad_touchmap_add_button(map, &button_a, &index);
+    assert(map);
+    assert(index == 0);
+    assert(map->button_cnt == 2);
+    assert(map->buttons[0].button == SDL_CONTROLLER_BUTTON_A);
+    assert(map->buttons[1].button == SDL_CONTROLLER_BUTTON_B);
+    assert(map->buttons[1].finger_id == SC_GPTM_BASE_FINGER_ID);
+
+    struct sc_gptm_touch_button skill_unbound = {
+        .center = {500, 600},
+        .radius = 75,
+        .button = SC_GPTM_BUTTON_UNBOUND,
+        .is_skill = true,
+    };
+    map = sc_gptm_gamepad_touchmap_add_button(map, &skill_unbound, &index);
+    assert(map);
+    assert(index == 2);
+    assert(map->button_cnt == 3);
+    assert(map->buttons[2].button == SC_GPTM_BUTTON_UNBOUND);
+    assert(map->buttons[2].radius == 75);
+    assert(!sc_gptm_touch_button_is_bound(&map->buttons[2]));
+
+    int next_index = -2;
+    map = sc_gptm_gamepad_touchmap_remove_button(map, 1, &next_index);
+    assert(map);
+    assert(map->button_cnt == 2);
+    assert(next_index == 1);
+    assert(map->buttons[0].button == SDL_CONTROLLER_BUTTON_A);
+    assert(map->buttons[1].button == SC_GPTM_BUTTON_UNBOUND);
+
+    assert(save_touchmap_config(output_path, map));
+
+    char *saved = read_file(output_path);
+    assert(saved);
+    cJSON *root = cJSON_Parse(saved);
+    assert(root);
+
+    cJSON *package_name = cJSON_GetObjectItemCaseSensitive(root,
+                                                           "packageName");
+    assert(cJSON_IsString(package_name));
+    assert(!strcmp(package_name->valuestring, "mutation.game"));
+
+    cJSON *buttons = get_path(root, "mappings", "button_mappings");
+    assert(cJSON_GetArraySize(buttons) == 1);
+    assert(find_mapping(buttons, "A"));
+
+    cJSON *skills = get_path(root, "mappings", "skill_casting");
+    assert(cJSON_GetArraySize(skills) == 1);
+    assert(find_mapping(skills, "UNKNOWN"));
 
     cJSON_Delete(root);
     free(saved);
@@ -374,6 +475,7 @@ main(int argc, char *argv[]) {
     test_parse_save_preserves_metadata();
     test_empty_touchmap_parse_save();
     test_empty_touchmap_create_save();
+    test_touchmap_mutation_helpers();
     test_overlay_coordinate_transforms();
     test_editor_keyboard_nudging();
     return 0;

@@ -31,6 +31,7 @@ enum sc_touchmap_overlay_control {
 #define SC_OVERLAY_WALK_COLOR       0xFFFFFF40  // White, low opacity
 #define SC_OVERLAY_BUTTON_COLOR     0x6BFF6B55  // Stronger green tint
 #define SC_OVERLAY_SKILL_COLOR      0x6B6BFF70  // Stronger blue tint
+#define SC_OVERLAY_UNBOUND_COLOR    0xFF3434A0  // Red warning tint
 #define SC_OVERLAY_TEXT_COLOR       0xFFFFFFB0  // White, high opacity
 
 #define SC_OVERLAY_DASH_COLOR       0xFFFFFFD0

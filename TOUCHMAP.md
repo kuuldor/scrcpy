@@ -433,22 +433,22 @@ Use this list to track future work. Implement one item at a time.
   - [x] Save empty or partially built touchmaps through Save As.
   - [x] Parse and save maps with no walk control and empty button/skill arrays.
 - [ ] Add GUI add/remove/bind workflows for mapped controls.
-  - [ ] Add map mutation helpers in `touchmap.c`/`touchmap.h` for appending and
+  - [x] Add map mutation helpers in `touchmap.c`/`touchmap.h` for appending and
     removing controls. Button/skill helpers should return the possibly new map
     pointer because `struct sc_gptm_gamepad_touchmap` uses a flexible array.
   - [x] Add optional Walk support with `has_walk`, allowing zero or one walk
     control.
-  - [ ] Preserve retained JSON metadata when adding/removing by relying on the
+  - [x] Preserve retained JSON metadata when adding/removing by relying on the
     existing save-time JSON rebuild path. New controls should have
     `json_entry == NULL` until the next successful save relinks entries.
-  - [ ] Support no-binding button/skill mappings as temporary editor state.
-  - [ ] Render no-binding button/skill mappings in red.
+  - [x] Support no-binding button/skill mappings as temporary editor state.
+  - [x] Render no-binding button/skill mappings in red.
   - [ ] Disallow saving while any button/skill mapping has no binding.
   - [ ] When binding to an already used gamepad input, transfer the binding to
     the selected mapping and clear the old mapping's binding.
-  - [ ] Assign stable virtual finger ids for newly added controls without
+  - [x] Assign stable virtual finger ids for newly added controls without
     colliding with existing walk/button ids.
-  - [ ] Re-sort bound entries after add/remove/bind because runtime button
+  - [x] Re-sort bound entries after add/remove/bind because runtime button
     lookup depends on sorted buttons.
   - [ ] Ensure runtime lookup ignores no-binding mappings.
   - [ ] Update editor selection after add/remove. Added controls should become
@@ -474,7 +474,10 @@ Use this list to track future work. Implement one item at a time.
   - [ ] Mark the touchmap dirty only after successful add/remove/bind mutation.
   - [ ] Add focused tests for empty maps, optional Walk, append/remove, binding
     transfer, no-binding save rejection, sorting, selection updates, and JSON
-    output after saving added controls.
+    output after saving added controls. Empty maps, optional Walk,
+    append/remove helpers, no-binding representation, sorting, metadata
+    preservation, and JSON output are covered; binding transfer, save
+    rejection, and selection updates remain.
 
 ### Deferred Runtime Configuration
 

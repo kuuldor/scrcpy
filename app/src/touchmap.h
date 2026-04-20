@@ -9,6 +9,7 @@
 
 #define SC_GPTM_WALK_CONTROL_DEADZONE   25
 #define SC_TOUCHMAP_MIN_RADIUS          32
+#define SC_GPTM_BUTTON_UNBOUND          UINT8_MAX
 
 struct cJSON;
 
@@ -49,6 +50,19 @@ struct sc_gptm_gamepad_touchmap {
 };
 
 struct sc_gptm_gamepad_touchmap *sc_gptm_gamepad_touchmap_new_empty(void);
+bool sc_gptm_touch_button_is_bound(const struct sc_gptm_touch_button *button);
+bool sc_gptm_gamepad_touchmap_set_walk(struct sc_gptm_gamepad_touchmap *map,
+                                       struct sc_point center,
+                                       int32_t radius);
+bool sc_gptm_gamepad_touchmap_remove_walk(
+    struct sc_gptm_gamepad_touchmap *map);
+struct sc_gptm_gamepad_touchmap *
+sc_gptm_gamepad_touchmap_add_button(struct sc_gptm_gamepad_touchmap *map,
+                                    const struct sc_gptm_touch_button *button,
+                                    int *out_index);
+struct sc_gptm_gamepad_touchmap *
+sc_gptm_gamepad_touchmap_remove_button(struct sc_gptm_gamepad_touchmap *map,
+                                       int index, int *out_index);
 struct sc_gptm_gamepad_touchmap * parse_touchmap_config(const char * filename);
 void sc_gptm_gamepad_touchmap_destroy(struct sc_gptm_gamepad_touchmap *map);
 bool save_touchmap_config(const char * filename,

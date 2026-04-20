@@ -39,6 +39,10 @@ static SDL_GameControllerButton button_name_to_value(const char *button_name) {
 
 static const char *
 button_value_to_name(uint8_t button) {
+    if (button == SC_GPTM_BUTTON_UNBOUND) {
+        return "UNKNOWN";
+    }
+
     switch (button) {
         case SDL_CONTROLLER_BUTTON_A: return "A";
         case SDL_CONTROLLER_BUTTON_B: return "B";
@@ -83,6 +87,28 @@ int sc_gptm_compare_btn(const void *a, const void *b) {
     return p1->button - p2->button;
 }
 
+static size_t
+sc_gptm_gamepad_touchmap_size(int button_cnt) {
+    return sizeof(struct sc_gptm_gamepad_touchmap)
+         + (size_t) button_cnt * sizeof(struct sc_gptm_touch_button);
+}
+
+static uint64_t
+sc_gptm_next_finger_id(const struct sc_gptm_gamepad_touchmap *map) {
+    uint64_t finger_id = SC_GPTM_BASE_FINGER_ID;
+    if (map->has_walk && map->walk.finger_id >= finger_id) {
+        finger_id = map->walk.finger_id + 1;
+    }
+
+    for (int i = 0; i < map->button_cnt; ++i) {
+        if (map->buttons[i].finger_id >= finger_id) {
+            finger_id = map->buttons[i].finger_id + 1;
+        }
+    }
+
+    return finger_id;
+}
+
 void
 sc_gptm_gamepad_touchmap_destroy(struct sc_gptm_gamepad_touchmap *map) {
     if (!map) {
@@ -119,6 +145,136 @@ sc_gptm_gamepad_touchmap_new_empty(void) {
     }
 
     return map;
+}
+
+bool
+sc_gptm_touch_button_is_bound(const struct sc_gptm_touch_button *button) {
+    return button && button->button != SC_GPTM_BUTTON_UNBOUND;
+}
+
+bool
+sc_gptm_gamepad_touchmap_set_walk(struct sc_gptm_gamepad_touchmap *map,
+                                  struct sc_point center, int32_t radius) {
+    if (!map) {
+        return false;
+    }
+
+    if (radius < SC_TOUCHMAP_MIN_RADIUS) {
+        radius = SC_TOUCHMAP_MIN_RADIUS;
+    }
+
+    uint64_t finger_id = map->has_walk && map->walk.finger_id
+                       ? map->walk.finger_id : sc_gptm_next_finger_id(map);
+
+    map->has_walk = true;
+    map->walk.center = center;
+    map->walk.current_pos = center;
+    map->walk.radius = radius;
+    map->walk.touch_down = false;
+    map->walk.finger_id = finger_id;
+    map->walk.json_entry = NULL;
+    return true;
+}
+
+bool
+sc_gptm_gamepad_touchmap_remove_walk(struct sc_gptm_gamepad_touchmap *map) {
+    if (!map || !map->has_walk) {
+        return false;
+    }
+
+    map->has_walk = false;
+    map->walk = (struct sc_gptm_walk_control) {0};
+    return true;
+}
+
+struct sc_gptm_gamepad_touchmap *
+sc_gptm_gamepad_touchmap_add_button(struct sc_gptm_gamepad_touchmap *map,
+                                    const struct sc_gptm_touch_button *button,
+                                    int *out_index) {
+    if (!map || !button) {
+        return NULL;
+    }
+
+    int old_count = map->button_cnt;
+    int new_count = old_count + 1;
+    struct sc_gptm_gamepad_touchmap *new_map =
+        malloc(sc_gptm_gamepad_touchmap_size(new_count));
+    if (!new_map) {
+        LOG_OOM();
+        return NULL;
+    }
+
+    memcpy(new_map, map, sc_gptm_gamepad_touchmap_size(old_count));
+    new_map->button_cnt = new_count;
+
+    struct sc_gptm_touch_button new_button = *button;
+    new_button.current_pos = new_button.center;
+    new_button.touch_down = false;
+    if (!new_button.finger_id) {
+        new_button.finger_id = sc_gptm_next_finger_id(map);
+    }
+    new_button.json_entry = NULL;
+    new_map->buttons[old_count] = new_button;
+
+    qsort(new_map->buttons, new_map->button_cnt,
+          sizeof(struct sc_gptm_touch_button), sc_gptm_compare_btn);
+
+    if (out_index) {
+        *out_index = -1;
+        for (int i = 0; i < new_map->button_cnt; ++i) {
+            if (new_map->buttons[i].finger_id == new_button.finger_id) {
+                *out_index = i;
+                break;
+            }
+        }
+    }
+
+    free(map);
+    return new_map;
+}
+
+struct sc_gptm_gamepad_touchmap *
+sc_gptm_gamepad_touchmap_remove_button(struct sc_gptm_gamepad_touchmap *map,
+                                       int index, int *out_index) {
+    if (!map || index < 0 || index >= map->button_cnt) {
+        return NULL;
+    }
+
+    int old_count = map->button_cnt;
+    int new_count = old_count - 1;
+    struct sc_gptm_gamepad_touchmap *new_map =
+        malloc(sc_gptm_gamepad_touchmap_size(new_count));
+    if (!new_map) {
+        LOG_OOM();
+        return NULL;
+    }
+
+    memcpy(new_map, map, sizeof(*map));
+    new_map->button_cnt = new_count;
+
+    if (index > 0) {
+        memcpy(new_map->buttons, map->buttons,
+               (size_t) index * sizeof(*map->buttons));
+    }
+
+    int remaining_after = old_count - index - 1;
+    if (remaining_after > 0) {
+        memcpy(&new_map->buttons[index], &map->buttons[index + 1],
+               (size_t) remaining_after * sizeof(*map->buttons));
+    }
+
+    if (out_index) {
+        if (new_count == 0) {
+            *out_index = -1;
+        } else if (index < new_count) {
+            *out_index = index;
+        } else {
+            *out_index = new_count - 1;
+        }
+    }
+
+    free(map);
+    return new_map;
 }
 
 static bool
