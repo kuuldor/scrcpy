@@ -1,4 +1,4 @@
-# Quick Reference: Gamepad Touchmap Overlay
+# Quick Reference: Gamepad Touchmap
 
 ## Quick Start
 
@@ -10,30 +10,67 @@ cd build
 ninja
 
 # Run with touchmap
-./app/scrcpy --gamepad-touchmap /path/to/touchmap.json
+./app/scrcpy -G --gamepad-touchmap /path/to/touchmap.json
 ```
 
 ## Keyboard Shortcuts
 
 | Shortcut | Action |
 |----------|--------|
-| **Ctrl+T** | Open file dialog to load touchmap |
-| **Ctrl+Shift+T** | Unload current touchmap |
-| **Ctrl+E** | **Toggle overlay visibility** |
+| Shortcut modifier + `T` | Open file dialog to load a touchmap |
+| Shortcut modifier + `Shift+T` | Unload the current touchmap |
+| Shortcut modifier + `E` | Toggle overlay visibility |
+| `Ctrl+S` | Save to the current touchmap file |
+| `Ctrl+Shift+S` | Save As |
+
+The shortcut modifier is scrcpy's configured shortcut modifier. The save
+shortcuts are currently hard-coded to Ctrl.
 
 ## Overlay Colors
 
-```
-Green  = Walk Control (Left Joystick) - Center: 200,800 Radius: 150
-Red    = Regular Buttons (A, B, X, Y, etc.)
-Blue   = Skill Buttons (Special abilities)
-```
+| Color | Meaning |
+|-------|---------|
+| White translucent circle | Walk control, driven by the left stick |
+| Green circle | Regular button mapping |
+| Blue circle | Skill mapping |
+| Red circle | Button/skill exists but has no gamepad binding |
+| Yellow rings | Currently selected edit target |
 
 ## What You See
 
-- **Semi-transparent circles** = Touch zones from your gamepad
-- **Circle outlines** = Zone boundaries
-- **Solid colored dots** = Currently active/pressed touches
+- Semi-transparent circles are touch zones from your gamepad.
+- Circle outlines are zone boundaries.
+- Dashed outlines show skill aiming radii in edit mode.
+- Solid filled dots show currently active/pressed touches.
+- Labels show gamepad inputs such as `A`, `RB`, `LT`, arrows, Guide, and
+  Touchpad.
+
+## Overlay Editing
+
+1. Toggle the overlay with shortcut modifier + `E`.
+2. If no touchmap is loaded, click `NEW` to create an empty in-memory map.
+3. Click `EDIT` to enter edit mode.
+4. Use the toolbar:
+   - `ADD`: choose `BUTTON`, `SKILL`, or `WALK`, then click the overlay to place
+     it.
+   - `DEL`: delete the selected control.
+   - `QUIT`: leave edit mode, with a save prompt if there are unsaved changes.
+5. Select a button or skill, then press a gamepad button or trigger to bind it.
+   There is no separate Bind button.
+6. Save with `Ctrl+S` or `Ctrl+Shift+S`.
+
+Editing gestures:
+
+- Drag a control center to move it.
+- Drag a Walk or skill radius edge to resize it.
+- Arrow keys nudge the selected control by one frame pixel.
+- `Shift` + arrow keys nudge by ten frame pixels.
+- `Esc` cancels pending add placement.
+
+Important save rule:
+
+- Red button/skill controls are unbound.
+- Saving is blocked while any button/skill is unbound.
 
 ## Example Touchmap.json
 
@@ -58,52 +95,70 @@ Blue   = Skill Buttons (Special abilities)
 }
 ```
 
+Supported button names include:
+
+- `A`, `B`, `X`, `Y`
+- `BACK`, `SELECT`, `GUIDE`, `HOME`, `START`
+- `LTHUMB`, `L3`, `RTHUMB`, `R3`
+- `LB`, `L1`, `RB`, `R1`, `LT`, `L2`, `RT`, `R2`
+- `UP`, `DOWN`, `LEFT`, `RIGHT`
+- `MISC`, `PADDLE1`, `PADDLE2`, `PADDLE3`, `PADDLE4`, `TOUCHPAD`
+
 ## File Locations
 
-- **Implementation**: `/home/lucd/work/scrcpy/app/src/touchmap_overlay.{c,h}`
-- **Integration**: `/home/lucd/work/scrcpy/app/src/display.{c,h}`
-- **Shortcuts**: `/home/lucd/work/scrcpy/app/src/input_manager.c`
-- **Documentation**: 
-  - `/home/lucd/work/scrcpy/TOUCHMAP_OVERLAY.md` (detailed)
-  - `/home/lucd/work/scrcpy/IMPLEMENTATION_SUMMARY.md` (overview)
+- **Runtime model and JSON**: `/home/lucd/work/scrcpy/app/src/touchmap.{c,h}`
+- **Editor logic**: `/home/lucd/work/scrcpy/app/src/touchmap_editor.{c,h}`
+- **Overlay rendering**: `/home/lucd/work/scrcpy/app/src/touchmap_overlay.{c,h}`
+- **Input integration and shortcuts**: `/home/lucd/work/scrcpy/app/src/input_manager.c`
+- **Display integration**: `/home/lucd/work/scrcpy/app/src/display.{c,h}`
+- **Maintained design doc**: `/home/lucd/work/scrcpy/TOUCHMAP.md`
 
 ## Troubleshooting
 
 **Overlay not showing?**
-- Make sure touchmap is loaded: `Ctrl+T` → select file
-- Press `Ctrl+E` to toggle overlay on
+- Make sure a touchmap is loaded with shortcut modifier + `T`, or toggle the
+  overlay and click `NEW`
+- Press shortcut modifier + `E` to toggle overlay on
 - Check console for errors
 
 **Overlay showing but no circles?**
 - Touchmap coordinates might be outside screen bounds
-- Verify touchmap.json has valid coordinates
+- The map may be empty; click `EDIT`, then use `ADD`
 
-**Performance issues?**
-- Overlay only renders when enabled
-- Press `Ctrl+E` to disable if needed
-- Minimal overhead (~1-2% CPU)
+**Save fails?**
+- Bind every red button/skill control first
+- Walk does not need a binding
+
+**Gamepad input touches the game while editing?**
+- Edit mode suppresses gamepad-to-touch output
+- Mouse input is consumed by the editor while edit mode is active
 
 ## Development Notes
 
 ### How It Works
 1. SDL draws the device screen texture
 2. Overlay module draws semi-transparent circles on top
-3. Button states determine indicator colors
-4. Real-time coordinate conversion handles screen scaling
+3. Input manager translates gamepad state into virtual Android touch events
+4. Editor mode mutates the in-memory touchmap and marks it dirty
+5. Save rebuilds known JSON sections while preserving unknown metadata
 
 ### Key Functions
-- `sc_touchmap_overlay_render()` - Main drawing function
-- `sc_display_toggle_overlay()` - Toggle visibility
-- `sc_display_set_touchmap()` - Set active touchmap
-- `draw_filled_circle()` - Core drawing primitive
+- `parse_touchmap_config()` - Load touchmap JSON
+- `save_touchmap_config()` - Save touchmap JSON
+- `sc_touchmap_overlay_render()` - Main overlay drawing function
+- `sc_touchmap_overlay_hit_control()` - Toolbar and menu hit testing
+- `sc_touchmap_editor_try_start_drag()` - Edit-mode hit testing
+- `sc_gptm_gamepad_touchmap_add_button()` - Append button/skill mapping
+- `sc_gptm_gamepad_touchmap_bind_button()` - Bind or rebind selected mapping
 
 ### Architecture
 ```
-Input (Gamepad) → Touch Events → Device Screen
-                ↓
-           Overlay Shows Mapping
+Gamepad input → input_manager → touchmap lookup → virtual Android touch events
+                         ↓
+                  overlay/editor UI
 ```
 
 ---
 
-**Ready to use!** Start scrcpy with your touchmap and press Ctrl+E to see the overlay.
+Start scrcpy with a touchmap, toggle the overlay, and use `EDIT` to adjust or
+build mappings.
