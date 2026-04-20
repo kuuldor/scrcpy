@@ -20,6 +20,7 @@
 
 static int save_touchmap_dialog_thread(void *data);
 static void sc_start_thread(const char *name, SDL_ThreadFunction fn, void *data);
+static void create_empty_touchmap(struct sc_input_manager *im);
 
 void
 sc_input_manager_init(struct sc_input_manager *im,
@@ -413,6 +414,7 @@ free_up_touchmap(struct sc_input_manager *im) {
         im->touchmap_file = NULL;
     }
     sc_touchmap_editor_reset(&im->touchmap_editor);
+    sc_display_set_touchmap(&im->screen->display, NULL);
 }
 
 static bool
@@ -461,13 +463,15 @@ sc_touchmap_release_active_touches(struct sc_input_manager *im) {
         return;
     }
 
-    if (map->walk.touch_down) {
+    if (map->has_walk && map->walk.touch_down) {
         map->walk.touch_down = false;
         simulate_virtual_touch(im, map->walk.finger_id,
                                AMOTION_EVENT_ACTION_UP,
                                map->walk.current_pos);
     }
-    map->walk.current_pos = map->walk.center;
+    if (map->has_walk) {
+        map->walk.current_pos = map->walk.center;
+    }
 
     for (int i = 0; i < map->button_cnt; ++i) {
         struct sc_gptm_touch_button *btn = &map->buttons[i];
@@ -492,7 +496,7 @@ sc_touchmap_point_in_rect(int32_t x, int32_t y, const SDL_Rect *rect) {
 
 static bool
 sc_touchmap_toggle_edit_mode(struct sc_input_manager *im, int32_t x, int32_t y) {
-    if (!im->game_touchmap || !sc_touchmap_overlay_is_enabled(&im->screen->display.overlay)) {
+    if (!sc_touchmap_overlay_is_enabled(&im->screen->display.overlay)) {
         return false;
     }
 
@@ -501,6 +505,11 @@ sc_touchmap_toggle_edit_mode(struct sc_input_manager *im, int32_t x, int32_t y) 
         sc_touchmap_overlay_is_edit_mode(&im->screen->display.overlay));
     if (!sc_touchmap_point_in_rect(x, y, &rect)) {
         return false;
+    }
+
+    if (!im->game_touchmap) {
+        create_empty_touchmap(im);
+        return true;
     }
 
     bool edit_mode = sc_touchmap_overlay_is_edit_mode(&im->screen->display.overlay);
@@ -527,7 +536,11 @@ sc_touchmap_toggle_edit_mode(struct sc_input_manager *im, int32_t x, int32_t y) 
         im->touchmap_exit_after_save = true;
         sc_start_thread("SaveTouchMap", save_touchmap_dialog_thread, im);
     } else if (choice == 2) {
-        if (sc_touchmap_reload_current_file(im)) {
+        if (!im->touchmap_file) {
+            free_up_touchmap(im);
+            sc_touchmap_overlay_set_edit_mode(&im->screen->display.overlay,
+                                              false);
+        } else if (sc_touchmap_reload_current_file(im)) {
             sc_touchmap_overlay_set_edit_mode(&im->screen->display.overlay,
                                               false);
         }
@@ -621,6 +634,31 @@ open_touchmap_file(struct sc_input_manager *im) {
     assert(im->controller);
 
     sc_start_thread("FileDialogThread", open_file_dialog_thread, im);
+}
+
+static void
+create_empty_touchmap(struct sc_input_manager *im) {
+    if (im->game_touchmap) {
+        LOGW("Touchmap already loaded");
+        return;
+    }
+
+    struct sc_gptm_gamepad_touchmap *map =
+        sc_gptm_gamepad_touchmap_new_empty();
+    if (!map) {
+        LOGE("Failed to create empty touchmap");
+        return;
+    }
+
+    im->game_touchmap = map;
+    SDL_free((void *) im->touchmap_file);
+    im->touchmap_file = NULL;
+    im->touchmap_dirty = true;
+    im->touchmap_exit_after_save = false;
+    sc_touchmap_editor_reset(&im->touchmap_editor);
+    sc_display_set_touchmap(&im->screen->display, im->game_touchmap);
+    sc_touchmap_overlay_set_enabled(&im->screen->display.overlay, true);
+    sc_touchmap_overlay_set_edit_mode(&im->screen->display.overlay, true);
 }
 
 static void
@@ -1557,6 +1595,10 @@ sc_handle_touchmap_button(struct sc_input_manager *im, uint8_t button, uint8_t s
 static void 
 sc_handle_touchmap_walk(struct sc_input_manager *im, struct sc_point pos) {
     if (sc_touchmap_edit_mode_active(im)) {
+        return;
+    }
+
+    if (!im->game_touchmap->has_walk) {
         return;
     }
 

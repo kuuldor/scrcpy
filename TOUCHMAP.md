@@ -32,6 +32,8 @@ Load or unload a touchmap at runtime:
 Display and edit the overlay:
 
 - Shortcut modifier + `E`: toggle the overlay, unless edit mode is active.
+- If the overlay is shown with no touchmap loaded, click `NEW` to create an
+  empty touchmap and enter edit mode.
 - Click the `EDIT` button in the overlay to enter edit mode.
 - Click the `QUIT` button in edit mode to leave edit mode.
 - `Ctrl+S`: save directly to the current touchmap file when one is loaded.
@@ -47,7 +49,8 @@ The runtime model is defined in `app/src/touchmap.h`.
 `struct sc_gptm_gamepad_touchmap` owns:
 
 - `joystick[2]`: current left and right stick values in SDL axis units.
-- `walk`: the left-stick touch control.
+- `has_walk`: whether the optional walk control exists.
+- `walk`: the left-stick touch control when `has_walk` is true.
 - `json_root`: retained parsed JSON tree used to preserve metadata on save.
 - `button_cnt`: number of mapped buttons.
 - `buttons[]`: flexible array of regular and skill buttons.
@@ -116,6 +119,18 @@ Supported mapping sections:
 }
 ```
 
+`walk_control` is optional. A touchmap may have zero or one walk control. Empty
+or newly created maps may contain only empty button and skill arrays:
+
+```json
+{
+  "mappings": {
+    "button_mappings": [],
+    "skill_casting": []
+  }
+}
+```
+
 The parser also tolerates extra fields such as `type`, `joystick`,
 `packageName`, and `titles` because it only reads the fields it needs. The
 saver preserves those unknown fields by retaining the parsed JSON tree,
@@ -154,6 +169,7 @@ When a touchmap is loaded:
 
 Walk behavior:
 
+- If no walk control exists, left-stick movement does not inject touch events.
 - The left stick maps to `walk.center + stick * walk.radius`.
 - Below `SC_GPTM_WALK_CONTROL_DEADZONE`, the walk finger is released.
 - Above the deadzone, the walk finger is pressed at the center and moved to the
@@ -364,6 +380,8 @@ These decisions were agreed for the next implementation passes:
   and `QUIT`. `ADD` uses a dropdown for `Button`, `Skill`, and `Walk`.
 - A touchmap may contain zero or one walk control. Walk can be added or deleted,
   but only when no other Walk exists.
+- Empty touchmaps can be created in memory and edited, then saved through Save
+  As.
 - Binding capture is shared by newly added controls and existing controls.
 - Button and skill mappings may temporarily have no binding, must render red,
   and must block saving until resolved.
@@ -408,17 +426,17 @@ Use this list to track future work. Implement one item at a time.
   where the local test harness supports it.
 - [x] Decide whether to add keyboard nudging for precise movement and radius
   changes.
-- [ ] Create new empty touchmap workflow.
-  - [ ] Add a way to create an empty in-memory touchmap when no touchmap is
-    loaded, so users can build a mapping from zero.
-  - [ ] Ensure an empty touchmap can be displayed and edited by the overlay.
-  - [ ] Save empty or partially built touchmaps through Save As.
-  - [ ] Parse and save maps with no walk control and empty button/skill arrays.
+- [x] Create new empty touchmap workflow.
+  - [x] Add a `NEW` overlay control that creates an empty in-memory touchmap
+    when no touchmap is loaded, so users can build a mapping from zero.
+  - [x] Ensure an empty touchmap can be displayed and edited by the overlay.
+  - [x] Save empty or partially built touchmaps through Save As.
+  - [x] Parse and save maps with no walk control and empty button/skill arrays.
 - [ ] Add GUI add/remove/bind workflows for mapped controls.
   - [ ] Add map mutation helpers in `touchmap.c`/`touchmap.h` for appending and
     removing controls. Button/skill helpers should return the possibly new map
     pointer because `struct sc_gptm_gamepad_touchmap` uses a flexible array.
-  - [ ] Add optional Walk support with `has_walk`, allowing zero or one walk
+  - [x] Add optional Walk support with `has_walk`, allowing zero or one walk
     control.
   - [ ] Preserve retained JSON metadata when adding/removing by relying on the
     existing save-time JSON rebuild path. New controls should have

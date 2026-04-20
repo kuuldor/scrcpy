@@ -77,21 +77,21 @@ sc_touchmap_editor_try_start_drag(struct sc_touchmap_editor *editor,
     int32_t min_radius = SC_TOUCHMAP_MIN_RADIUS;
     int32_t radius_threshold = min_radius / 4;
 
-    if (sc_touchmap_editor_hit_test_radius(&map->walk.center,
-                                           map->walk.radius, point,
-                                           radius_threshold)) {
-        sc_touchmap_editor_start_drag(editor,
-                                      SC_TOUCHMAP_EDITOR_TARGET_WALK_RADIUS,
-                                      -1);
-        return true;
-    }
+    if (map->has_walk) {
+        if (sc_touchmap_editor_hit_test_radius(&map->walk.center,
+                                               map->walk.radius, point,
+                                               radius_threshold)) {
+            sc_touchmap_editor_start_drag(
+                editor, SC_TOUCHMAP_EDITOR_TARGET_WALK_RADIUS, -1);
+            return true;
+        }
 
-    if (sc_touchmap_editor_hit_test_center(&map->walk.center, min_radius,
-                                           point)) {
-        sc_touchmap_editor_start_drag(editor,
-                                      SC_TOUCHMAP_EDITOR_TARGET_WALK_CENTER,
-                                      -1);
-        return true;
+        if (sc_touchmap_editor_hit_test_center(&map->walk.center, min_radius,
+                                               point)) {
+            sc_touchmap_editor_start_drag(
+                editor, SC_TOUCHMAP_EDITOR_TARGET_WALK_CENTER, -1);
+            return true;
+        }
     }
 
     for (int i = 0; i < map->button_cnt; ++i) {
@@ -134,6 +134,9 @@ sc_touchmap_editor_apply_center_drag(struct sc_touchmap_editor *editor,
                                      struct sc_point point) {
     switch (editor->drag.target) {
         case SC_TOUCHMAP_EDITOR_TARGET_WALK_CENTER:
+            if (!map->has_walk) {
+                return false;
+            }
             map->walk.center = point;
             map->walk.current_pos = point;
             return true;
@@ -160,6 +163,9 @@ sc_touchmap_editor_apply_radius_drag(struct sc_touchmap_editor *editor,
     int32_t min_radius = SC_TOUCHMAP_MIN_RADIUS;
     switch (editor->drag.target) {
         case SC_TOUCHMAP_EDITOR_TARGET_WALK_RADIUS: {
+            if (!map->has_walk) {
+                return false;
+            }
             struct sc_point center = map->walk.center;
             int32_t dx = point.x - center.x;
             int32_t dy = point.y - center.y;
@@ -220,6 +226,9 @@ sc_touchmap_editor_nudge_selection(struct sc_touchmap_editor *editor,
     struct sc_touchmap_editor_selection selection = editor->selection;
     switch (selection.target) {
         case SC_TOUCHMAP_EDITOR_TARGET_WALK_CENTER:
+            if (!map->has_walk) {
+                return false;
+            }
             if (!dx && !dy) {
                 return false;
             }
@@ -240,6 +249,9 @@ sc_touchmap_editor_nudge_selection(struct sc_touchmap_editor *editor,
             return true;
         }
         case SC_TOUCHMAP_EDITOR_TARGET_WALK_RADIUS: {
+            if (!map->has_walk) {
+                return false;
+            }
             if (!radius_delta) {
                 return false;
             }

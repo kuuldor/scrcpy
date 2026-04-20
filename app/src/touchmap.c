@@ -95,6 +95,32 @@ sc_gptm_gamepad_touchmap_destroy(struct sc_gptm_gamepad_touchmap *map) {
     free(map);
 }
 
+struct sc_gptm_gamepad_touchmap *
+sc_gptm_gamepad_touchmap_new_empty(void) {
+    struct sc_gptm_gamepad_touchmap *map = malloc(sizeof(*map));
+    if (!map) {
+        LOG_OOM();
+        return NULL;
+    }
+
+    memset(map, 0, sizeof(*map));
+    map->json_root = cJSON_CreateObject();
+    if (!map->json_root) {
+        free(map);
+        return NULL;
+    }
+
+    cJSON *mappings = cJSON_CreateObject();
+    if (!mappings || !cJSON_AddItemToObject(map->json_root, "mappings",
+                                            mappings)) {
+        cJSON_Delete(mappings);
+        sc_gptm_gamepad_touchmap_destroy(map);
+        return NULL;
+    }
+
+    return map;
+}
+
 static bool
 replace_or_add(cJSON *object, const char *name, cJSON *item) {
     if (!object || !name || !item) {
@@ -283,10 +309,16 @@ update_touchmap_json_root(struct sc_gptm_gamepad_touchmap *map) {
     }
 
     cJSON *mappings = get_or_add_object(root, "mappings");
-    if (!mappings || !update_walk_json(mappings, &map->walk,
-                                       &walk_json_entry)
-            || !rebuild_button_arrays(mappings, map,
-                                      button_json_entries)) {
+    bool ok = mappings != NULL;
+    if (ok) {
+        if (map->has_walk) {
+            ok = update_walk_json(mappings, &map->walk, &walk_json_entry);
+        } else {
+            cJSON_DeleteItemFromObjectCaseSensitive(mappings, "walk_control");
+        }
+    }
+
+    if (!ok || !rebuild_button_arrays(mappings, map, button_json_entries)) {
         free(button_json_entries);
         cJSON_Delete(root);
         return false;
@@ -297,7 +329,7 @@ update_touchmap_json_root(struct sc_gptm_gamepad_touchmap *map) {
     }
 
     map->json_root = root;
-    map->walk.json_entry = walk_json_entry;
+    map->walk.json_entry = map->has_walk ? walk_json_entry : NULL;
     for (int i = 0; i < map->button_cnt; ++i) {
         map->buttons[i].json_entry = button_json_entries[i];
     }
@@ -379,13 +411,15 @@ struct sc_gptm_gamepad_touchmap * parse_touchmap_config(const char *filename) {
         map->button_cnt = skill_cnt+btn_cnt;
         map->json_root = root;
 
-        cJSON *walk_control = cJSON_GetObjectItem(mappings, "walk_control");
-        if (walk_control) {
+        cJSON *walk_control =
+            cJSON_GetObjectItemCaseSensitive(mappings, "walk_control");
+        if (cJSON_IsObject(walk_control)) {
             cJSON *center = cJSON_GetObjectItem(walk_control, "center");
             cJSON *radius = cJSON_GetObjectItem(walk_control, "radius");
             if (center && radius) {
                 int x = cJSON_GetObjectItem(center, "x")->valueint;
                 int y = cJSON_GetObjectItem(center, "y")->valueint;
+                map->has_walk = true;
                 map->walk.center.x = x;
                 map->walk.center.y = y;
                 map->walk.radius = radius->valueint;

@@ -191,11 +191,13 @@ enum overlay_glyph {
     OVERLAY_GLYPH_D,
     OVERLAY_GLYPH_E,
     OVERLAY_GLYPH_I,
+    OVERLAY_GLYPH_N,
     OVERLAY_GLYPH_O,
     OVERLAY_GLYPH_Q,
     OVERLAY_GLYPH_S,
     OVERLAY_GLYPH_T,
     OVERLAY_GLYPH_U,
+    OVERLAY_GLYPH_W,
 };
 
 static const uint32_t overlay_glyph_data[][24] = {
@@ -319,6 +321,12 @@ static const uint32_t overlay_glyph_data[][24] = {
         0x001800, 0x001800, 0x001800, 0x001800, 0x001800, 0x001800,
         0x001800, 0x01FF80, 0x01FF80, 0x000000, 0x000000, 0x000000,
     },
+    [OVERLAY_GLYPH_N] = {
+        0x000000, 0x000000, 0x000000, 0x0181C0, 0x01C1C0, 0x01E1C0,
+        0x01E1C0, 0x01F1C0, 0x01D9C0, 0x01D9C0, 0x01CDC0, 0x01CDC0,
+        0x01C7C0, 0x01C7C0, 0x01C3C0, 0x01C3C0, 0x01C1C0, 0x01C1C0,
+        0x01C1C0, 0x01C1C0, 0x01C1C0, 0x000000, 0x000000, 0x000000,
+    },
     [OVERLAY_GLYPH_O] = {
         0x000000, 0x000000, 0x000000, 0x003E00, 0x00FF00, 0x00E380,
         0x01C180, 0x0181C0, 0x0181C0, 0x0181C0, 0x0380C0, 0x0380C0,
@@ -348,6 +356,12 @@ static const uint32_t overlay_glyph_data[][24] = {
         0x0181C0, 0x0181C0, 0x0181C0, 0x0181C0, 0x0181C0, 0x0181C0,
         0x0181C0, 0x0181C0, 0x0181C0, 0x0181C0, 0x0181C0, 0x018180,
         0x01C380, 0x00FF00, 0x003E00, 0x000000, 0x000000, 0x000000,
+    },
+    [OVERLAY_GLYPH_W] = {
+        0x000000, 0x000000, 0x000000, 0x0300C0, 0x0300C0, 0x0300C0,
+        0x0300C0, 0x0300C0, 0x0300C0, 0x0300C0, 0x0300C0, 0x030CC0,
+        0x031EC0, 0x031EC0, 0x033FC0, 0x0333C0, 0x0333C0, 0x03E3C0,
+        0x03C1C0, 0x0381C0, 0x0300C0, 0x000000, 0x000000, 0x000000,
     },
 };
 
@@ -445,7 +459,10 @@ sc_touchmap_overlay_get_edit_button_rect(const SDL_Rect *content_rect,
 
 static void
 draw_edit_button(SDL_Renderer *renderer, const SDL_Rect *rect,
-                 bool edit_mode) {
+                 bool has_touchmap, bool edit_mode) {
+    static const enum overlay_glyph new_label[] = {
+        OVERLAY_GLYPH_N, OVERLAY_GLYPH_E, OVERLAY_GLYPH_W,
+    };
     static const enum overlay_glyph edit_label[] = {
         OVERLAY_GLYPH_E, OVERLAY_GLYPH_D, OVERLAY_GLYPH_I, OVERLAY_GLYPH_T,
     };
@@ -460,7 +477,12 @@ draw_edit_button(SDL_Renderer *renderer, const SDL_Rect *rect,
 
     int center_x = rect->x + rect->w / 2;
     int center_y = rect->y + rect->h / 2;
-    if (edit_mode) {
+    if (!has_touchmap) {
+        draw_glyph_word(renderer, center_x, center_y,
+                        new_label, (int) (sizeof(new_label)
+                                          / sizeof(new_label[0])),
+                        OVERLAY_GLYPH_SCALE_BUTTON);
+    } else if (edit_mode) {
         draw_glyph_word(renderer, center_x, center_y,
                         close_label, (int) (sizeof(close_label)
                                             / sizeof(close_label[0])),
@@ -658,6 +680,9 @@ draw_touchmap_selection(SDL_Renderer *renderer,
         touchmap_editor->selection;
     switch (selection.target) {
         case SC_TOUCHMAP_EDITOR_TARGET_WALK_CENTER: {
+            if (!touchmap->has_walk) {
+                break;
+            }
             struct sc_point center = sc_touchmap_overlay_transform_point(
                 &touchmap->walk.center, frame_size, content_rect, orientation);
             int32_t radius = sc_touchmap_overlay_transform_radius(
@@ -667,6 +692,9 @@ draw_touchmap_selection(SDL_Renderer *renderer,
             break;
         }
         case SC_TOUCHMAP_EDITOR_TARGET_WALK_RADIUS: {
+            if (!touchmap->has_walk) {
+                break;
+            }
             struct sc_point center = sc_touchmap_overlay_transform_point(
                 &touchmap->walk.center, frame_size, content_rect, orientation);
             int32_t radius = sc_touchmap_overlay_transform_radius(
@@ -706,13 +734,21 @@ sc_touchmap_overlay_render(struct sc_touchmap_overlay *overlay,
                            const SDL_Rect *content_rect,
                            enum sc_orientation orientation,
                            const struct sc_touchmap_editor *touchmap_editor) {
-    if (!overlay->enabled || !touchmap || !content_rect || !frame_size
+    if (!overlay->enabled || !content_rect || !frame_size
             || !frame_size->width || !frame_size->height) {
         return true;
     }
 
+    if (!touchmap) {
+        SDL_Rect edit_rect = sc_touchmap_overlay_get_edit_button_rect(
+            content_rect, false);
+        draw_edit_button(renderer, &edit_rect, false, false);
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+        return true;
+    }
+
     // Draw walk control (outer circle)
-    if (touchmap->walk.radius > 0) {
+    if (touchmap->has_walk && touchmap->walk.radius > 0) {
         struct sc_point walk_center = sc_touchmap_overlay_transform_point(
             &touchmap->walk.center, frame_size, content_rect, orientation);
         int32_t walk_radius = sc_touchmap_overlay_transform_radius(
@@ -733,7 +769,7 @@ sc_touchmap_overlay_render(struct sc_touchmap_overlay *overlay,
     }
 
     // Draw current position for walk control
-    if (touchmap->walk.touch_down) {
+    if (touchmap->has_walk && touchmap->walk.touch_down) {
         struct sc_point walk_pos = sc_touchmap_overlay_transform_point(
             &touchmap->walk.current_pos, frame_size, content_rect, orientation);
         int32_t walk_pos_radius = sc_touchmap_overlay_transform_radius(
@@ -749,7 +785,7 @@ sc_touchmap_overlay_render(struct sc_touchmap_overlay *overlay,
 
     }
 
-    if (touchmap->walk.radius > 0) {
+    if (touchmap->has_walk && touchmap->walk.radius > 0) {
         struct sc_point walk_center = sc_touchmap_overlay_transform_point(
             &touchmap->walk.center, frame_size, content_rect, orientation);
         int walk_label_scale = OVERLAY_GLYPH_SCALE_WALK;
@@ -814,7 +850,7 @@ sc_touchmap_overlay_render(struct sc_touchmap_overlay *overlay,
 
     SDL_Rect edit_rect = sc_touchmap_overlay_get_edit_button_rect(content_rect,
                                                                   overlay->edit_mode);
-    draw_edit_button(renderer, &edit_rect, overlay->edit_mode);
+    draw_edit_button(renderer, &edit_rect, true, overlay->edit_mode);
 
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
     return true;

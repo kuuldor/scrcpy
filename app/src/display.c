@@ -359,8 +359,9 @@ sc_display_render(struct sc_display *display, const SDL_Rect *geometry,
         }
     }
 
-    // Render the touchmap overlay on top
-    if (display->touchmap) {
+    // Render the touchmap overlay on top. It may render a NEW control even
+    // when no touchmap is attached yet.
+    if (sc_touchmap_overlay_is_enabled(&display->overlay)) {
         sc_touchmap_overlay_render(&display->overlay, display->renderer,
                                   display->touchmap, &display->frame_size,
                                   dstrect, orientation, touchmap_editor);

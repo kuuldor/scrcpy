@@ -117,6 +117,7 @@ test_parse_save_preserves_metadata(void) {
 
     struct sc_gptm_gamepad_touchmap *map = parse_touchmap_config(input_path);
     assert(map);
+    assert(map->has_walk);
     assert(map->walk.center.x == 310);
     assert(map->walk.center.y == 845);
     assert(map->walk.radius == 150);
@@ -195,6 +196,80 @@ test_parse_save_preserves_metadata(void) {
 }
 
 static void
+test_empty_touchmap_parse_save(void) {
+    const char *input_path = "test_touchmap_empty_input.json";
+    const char *output_path = "test_touchmap_empty_output.json";
+
+    const char *json =
+        "{"
+        "  \"packageName\": \"empty.game\","
+        "  \"mappings\": {"
+        "    \"button_mappings\": [],"
+        "    \"skill_casting\": []"
+        "  }"
+        "}";
+
+    assert(write_file(input_path, json));
+
+    struct sc_gptm_gamepad_touchmap *map = parse_touchmap_config(input_path);
+    assert(map);
+    assert(!map->has_walk);
+    assert(map->button_cnt == 0);
+
+    assert(save_touchmap_config(output_path, map));
+
+    char *saved = read_file(output_path);
+    assert(saved);
+    cJSON *root = cJSON_Parse(saved);
+    assert(root);
+
+    cJSON *mappings = cJSON_GetObjectItemCaseSensitive(root, "mappings");
+    assert(cJSON_IsObject(mappings));
+    assert(!cJSON_GetObjectItemCaseSensitive(mappings, "walk_control"));
+    assert(cJSON_IsArray(
+        cJSON_GetObjectItemCaseSensitive(mappings, "button_mappings")));
+    assert(cJSON_IsArray(
+        cJSON_GetObjectItemCaseSensitive(mappings, "skill_casting")));
+
+    cJSON_Delete(root);
+    free(saved);
+    sc_gptm_gamepad_touchmap_destroy(map);
+    remove(input_path);
+    remove(output_path);
+}
+
+static void
+test_empty_touchmap_create_save(void) {
+    const char *output_path = "test_touchmap_new_empty_output.json";
+
+    struct sc_gptm_gamepad_touchmap *map =
+        sc_gptm_gamepad_touchmap_new_empty();
+    assert(map);
+    assert(!map->has_walk);
+    assert(map->button_cnt == 0);
+
+    assert(save_touchmap_config(output_path, map));
+
+    char *saved = read_file(output_path);
+    assert(saved);
+    cJSON *root = cJSON_Parse(saved);
+    assert(root);
+
+    cJSON *mappings = cJSON_GetObjectItemCaseSensitive(root, "mappings");
+    assert(cJSON_IsObject(mappings));
+    assert(!cJSON_GetObjectItemCaseSensitive(mappings, "walk_control"));
+    assert(cJSON_IsArray(
+        cJSON_GetObjectItemCaseSensitive(mappings, "button_mappings")));
+    assert(cJSON_IsArray(
+        cJSON_GetObjectItemCaseSensitive(mappings, "skill_casting")));
+
+    cJSON_Delete(root);
+    free(saved);
+    sc_gptm_gamepad_touchmap_destroy(map);
+    remove(output_path);
+}
+
+static void
 assert_transformed_point(enum sc_orientation orientation, int x, int y) {
     const struct sc_size frame_size = {100, 200};
     const SDL_Rect unrotated = {10, 20, 1000, 2000};
@@ -236,6 +311,7 @@ test_editor_keyboard_nudging(void) {
         calloc(1, sizeof(*map) + 2 * sizeof(*map->buttons));
     assert(map);
 
+    map->has_walk = true;
     map->walk.center = (struct sc_point) {100, 200};
     map->walk.current_pos = map->walk.center;
     map->walk.radius = 40;
@@ -296,6 +372,8 @@ main(int argc, char *argv[]) {
     (void) argv;
 
     test_parse_save_preserves_metadata();
+    test_empty_touchmap_parse_save();
+    test_empty_touchmap_create_save();
     test_overlay_coordinate_transforms();
     test_editor_keyboard_nudging();
     return 0;
