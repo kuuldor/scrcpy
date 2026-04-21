@@ -434,7 +434,7 @@ Use this list to track future work. Implement one item at a time.
   - [x] Ensure an empty touchmap can be displayed and edited by the overlay.
   - [x] Save empty or partially built touchmaps through Save As.
   - [x] Parse and save maps with no walk control and empty button/skill arrays.
-- [ ] Add GUI add/remove/bind workflows for mapped controls.
+- [x] Add GUI add/remove/bind workflows for mapped controls.
   - [x] Add map mutation helpers in `touchmap.c`/`touchmap.h` for appending and
     removing controls. Button/skill helpers should return the possibly new map
     pointer because `struct sc_gptm_gamepad_touchmap` uses a flexible array.
