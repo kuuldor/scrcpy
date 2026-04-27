@@ -669,8 +669,7 @@ point_in_rect(int32_t x, int32_t y, const SDL_Rect *rect) {
 
 static void
 draw_touchmap_toolbar(SDL_Renderer *renderer,
-                      struct sc_touchmap_overlay *overlay,
-                      const struct sc_gptm_gamepad_touchmap *touchmap,
+                      const struct sc_touchmap_state *touchmap_state,
                       const SDL_Rect *content_rect) {
     static const enum sc_touchmap_overlay_control controls[] = {
         SC_TOUCHMAP_OVERLAY_CONTROL_ADD,
@@ -686,7 +685,7 @@ draw_touchmap_toolbar(SDL_Renderer *renderer,
         draw_overlay_button(renderer, &rect, controls[i], bg);
     }
 
-    if (!overlay->add_menu_open) {
+    if (!touchmap_state->add_menu_open) {
         return;
     }
 
@@ -700,7 +699,7 @@ draw_touchmap_toolbar(SDL_Renderer *renderer,
         SDL_Rect rect = overlay_get_add_menu_item_rect(content_rect,
                                                        menu_items[i]);
         bool disabled = menu_items[i] == SC_TOUCHMAP_OVERLAY_CONTROL_ADD_WALK
-                     && touchmap && touchmap->has_walk;
+                     && touchmap_state->map && touchmap_state->map->has_walk;
         uint32_t bg = disabled ? 0x40404099 : SC_OVERLAY_EDIT_BG_COLOR;
         draw_overlay_button(renderer, &rect, menu_items[i], bg);
     }
@@ -764,28 +763,6 @@ draw_button_label(SDL_Renderer *renderer, int center_x, int center_y,
     }
 
     draw_glyph(renderer, center_x, center_y, glyph, scale);
-}
-
-
-bool
-sc_touchmap_overlay_init(struct sc_touchmap_overlay *overlay,
-                         SDL_Renderer *renderer) {
-    (void)renderer; // Not used in this simple implementation
-    overlay->overlay_texture = NULL;
-    overlay->last_size.width = 0;
-    overlay->last_size.height = 0;
-    overlay->enabled = false;
-    overlay->edit_mode = false;
-    overlay->add_menu_open = false;
-    return true;
-}
-
-void
-sc_touchmap_overlay_destroy(struct sc_touchmap_overlay *overlay) {
-    if (overlay->overlay_texture) {
-        SDL_DestroyTexture(overlay->overlay_texture);
-        overlay->overlay_texture = NULL;
-    }
 }
 
 #ifndef SC_TEST
@@ -940,18 +917,17 @@ draw_touchmap_selection(SDL_Renderer *renderer,
 }
 
 bool
-sc_touchmap_overlay_render(struct sc_touchmap_overlay *overlay,
-                           SDL_Renderer *renderer,
-                           const struct sc_gptm_gamepad_touchmap *touchmap,
+sc_touchmap_overlay_render(SDL_Renderer *renderer,
+                           const struct sc_touchmap_state *touchmap_state,
                            const struct sc_size *frame_size,
                            const SDL_Rect *content_rect,
-                           enum sc_orientation orientation,
-                           const struct sc_touchmap_editor *touchmap_editor) {
-    if (!overlay->enabled || !content_rect || !frame_size
+                           enum sc_orientation orientation) {
+    if (!touchmap_state->overlay_enabled || !content_rect || !frame_size
             || !frame_size->width || !frame_size->height) {
         return true;
     }
 
+    const struct sc_gptm_gamepad_touchmap *touchmap = touchmap_state->map;
     if (!touchmap) {
         SDL_Rect edit_rect = sc_touchmap_overlay_get_edit_button_rect(
             content_rect, false);
@@ -1039,7 +1015,7 @@ sc_touchmap_overlay_render(struct sc_touchmap_overlay *overlay,
                            button_radius,
                            outline_color);
 
-        if (btn->is_skill && btn->radius > 0 && overlay->edit_mode) {
+        if (btn->is_skill && btn->radius > 0 && touchmap_state->edit_mode) {
             int32_t skill_radius = sc_touchmap_overlay_transform_radius(
                 btn->radius, frame_size, content_rect, orientation);
             draw_dashed_circle_outline(renderer, btn_center.x, btn_center.y,
@@ -1059,10 +1035,10 @@ sc_touchmap_overlay_render(struct sc_touchmap_overlay *overlay,
                           label, OVERLAY_GLYPH_SCALE_BUTTON);
     }
 
-    if (overlay->edit_mode) {
+    if (touchmap_state->edit_mode) {
         draw_touchmap_selection(renderer, touchmap, frame_size, content_rect,
-                                orientation, touchmap_editor);
-        draw_touchmap_toolbar(renderer, overlay, touchmap, content_rect);
+                                orientation, &touchmap_state->editor);
+        draw_touchmap_toolbar(renderer, touchmap_state, content_rect);
     } else {
         SDL_Rect edit_rect = sc_touchmap_overlay_get_edit_button_rect(
             content_rect, false);
@@ -1073,51 +1049,13 @@ sc_touchmap_overlay_render(struct sc_touchmap_overlay *overlay,
     return true;
 }
 
-void
-sc_touchmap_overlay_toggle(struct sc_touchmap_overlay *overlay) {
-    overlay->enabled = !overlay->enabled;
-    if (!overlay->enabled) {
-        overlay->edit_mode = false;
-        overlay->add_menu_open = false;
-    }
-    LOGI("Touchmap overlay %s", overlay->enabled ? "enabled" : "disabled");
-}
-
-void
-sc_touchmap_overlay_set_enabled(struct sc_touchmap_overlay *overlay,
-                                bool enabled) {
-    overlay->enabled = enabled;
-    if (!enabled) {
-        overlay->edit_mode = false;
-        overlay->add_menu_open = false;
-    }
-}
-
-bool
-sc_touchmap_overlay_is_enabled(const struct sc_touchmap_overlay *overlay) {
-    return overlay->enabled;
-}
-
-void
-sc_touchmap_overlay_set_edit_mode(struct sc_touchmap_overlay *overlay,
-                                  bool edit_mode) {
-    overlay->edit_mode = edit_mode;
-    if (!edit_mode) {
-        overlay->add_menu_open = false;
-    }
-}
-
-bool
-sc_touchmap_overlay_is_edit_mode(const struct sc_touchmap_overlay *overlay) {
-    return overlay->edit_mode;
-}
-
 enum sc_touchmap_overlay_control
-sc_touchmap_overlay_hit_control(struct sc_touchmap_overlay *overlay,
-                                const struct sc_gptm_gamepad_touchmap *touchmap,
+sc_touchmap_overlay_hit_control(struct sc_touchmap_state *touchmap_state,
                                 const SDL_Rect *content_rect,
                                 int32_t x, int32_t y) {
-    if (!overlay->enabled || !content_rect) {
+    const struct sc_gptm_gamepad_touchmap *touchmap = touchmap_state->map;
+
+    if (!touchmap_state->overlay_enabled || !content_rect) {
         return SC_TOUCHMAP_OVERLAY_CONTROL_NONE;
     }
 
@@ -1128,14 +1066,14 @@ sc_touchmap_overlay_hit_control(struct sc_touchmap_overlay *overlay,
                                           : SC_TOUCHMAP_OVERLAY_CONTROL_NONE;
     }
 
-    if (!overlay->edit_mode) {
+    if (!touchmap_state->edit_mode) {
         SDL_Rect rect = sc_touchmap_overlay_get_edit_button_rect(content_rect,
                                                                  false);
         return point_in_rect(x, y, &rect) ? SC_TOUCHMAP_OVERLAY_CONTROL_EDIT
                                           : SC_TOUCHMAP_OVERLAY_CONTROL_NONE;
     }
 
-    if (overlay->add_menu_open) {
+    if (touchmap_state->add_menu_open) {
         static const enum sc_touchmap_overlay_control menu_items[] = {
             SC_TOUCHMAP_OVERLAY_CONTROL_ADD_BUTTON,
             SC_TOUCHMAP_OVERLAY_CONTROL_ADD_SKILL,
@@ -1146,7 +1084,7 @@ sc_touchmap_overlay_hit_control(struct sc_touchmap_overlay *overlay,
             SDL_Rect rect = overlay_get_add_menu_item_rect(content_rect,
                                                            menu_items[i]);
             if (point_in_rect(x, y, &rect)) {
-                overlay->add_menu_open = false;
+                touchmap_state->add_menu_open = false;
                 return menu_items[i];
             }
         }
@@ -1163,14 +1101,14 @@ sc_touchmap_overlay_hit_control(struct sc_touchmap_overlay *overlay,
                                                         toolbar_items[i]);
         if (point_in_rect(x, y, &rect)) {
             if (toolbar_items[i] == SC_TOUCHMAP_OVERLAY_CONTROL_ADD) {
-                overlay->add_menu_open = !overlay->add_menu_open;
+                touchmap_state->add_menu_open = !touchmap_state->add_menu_open;
             } else {
-                overlay->add_menu_open = false;
+                touchmap_state->add_menu_open = false;
             }
             return toolbar_items[i];
         }
     }
 
-    overlay->add_menu_open = false;
+    touchmap_state->add_menu_open = false;
     return SC_TOUCHMAP_OVERLAY_CONTROL_NONE;
 }

@@ -84,6 +84,7 @@ struct sc_screen_params {
     enum sc_gamepad_input_mode gamepad_input_mode;
     const char * touchmap_file;
     const char * touchmap_dir;
+    const char * device_serial;
     bool legacy_paste;
     bool clipboard_autosync;
     uint8_t shortcut_mods; // OR of enum sc_shortcut_mod values

@@ -202,6 +202,18 @@ sc_gptm_gamepad_touchmap_set_package_name(
     return replace_or_add(map->json_root, "packageName", item);
 }
 
+const char *
+sc_gptm_gamepad_touchmap_get_package_name(
+        const struct sc_gptm_gamepad_touchmap *map) {
+    if (!map || !map->json_root) {
+        return NULL;
+    }
+
+    cJSON *package_name =
+        cJSON_GetObjectItemCaseSensitive(map->json_root, "packageName");
+    return cJSON_IsString(package_name) ? package_name->valuestring : NULL;
+}
+
 char *
 sc_touchmap_build_default_filename(const char *package_name) {
     if (!package_name || !*package_name) {

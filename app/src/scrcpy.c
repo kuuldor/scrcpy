@@ -208,8 +208,13 @@ event_loop(struct scrcpy *s, bool has_screen) {
                 break;
             }
             default:
-                if (has_screen && !sc_screen_handle_event(&s->screen, &event)) {
-                    return SCRCPY_EXIT_FAILURE;
+                if (has_screen) {
+                    if (!sc_screen_handle_event(&s->screen, &event)) {
+                        sc_cleanup_event(&event);
+                        return SCRCPY_EXIT_FAILURE;
+                    }
+                } else {
+                    sc_cleanup_event(&event);
                 }
                 break;
         }
@@ -228,6 +233,8 @@ terminate_event_loop(void) {
             sc_runnable_fn run = event.user.data1;
             void *userdata = event.user.data2;
             run(userdata);
+        } else {
+            sc_cleanup_event(&event);
         }
     }
 }
@@ -251,6 +258,7 @@ await_for_server(bool *connected) {
                 }
                 return true;
             default:
+                sc_cleanup_event(&event);
                 break;
         }
     }
@@ -835,6 +843,7 @@ aoa_complete:
             .mouse_bindings = options->mouse_bindings,
             .touchmap_file = options->touchmap_file,
             .touchmap_dir = options->touchmap_dir,
+            .device_serial = s->server.serial,
             .gamepad_input_mode = options->gamepad_input_mode,
             .legacy_paste = options->legacy_paste,
             .clipboard_autosync = options->clipboard_autosync,

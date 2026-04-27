@@ -51,6 +51,8 @@ struct sc_gptm_gamepad_touchmap {
 
 struct sc_gptm_gamepad_touchmap *sc_gptm_gamepad_touchmap_new_empty(void);
 char *sc_touchmap_read_package_name(const char *filename);
+const char *sc_gptm_gamepad_touchmap_get_package_name(
+    const struct sc_gptm_gamepad_touchmap *map);
 bool sc_gptm_gamepad_touchmap_set_package_name(
     struct sc_gptm_gamepad_touchmap *map, const char *package_name);
 char *sc_touchmap_build_default_filename(const char *package_name);

@@ -264,8 +264,12 @@ test_touchmap_package_metadata_helpers(void) {
 
     struct sc_gptm_gamepad_touchmap *map = parse_touchmap_config(input_path);
     assert(map);
+    assert(!strcmp(sc_gptm_gamepad_touchmap_get_package_name(map),
+                   "example.initial"));
 
     assert(sc_gptm_gamepad_touchmap_set_package_name(map, "example.changed"));
+    assert(!strcmp(sc_gptm_gamepad_touchmap_get_package_name(map),
+                   "example.changed"));
     assert(save_touchmap_config(output_path, map));
 
     package_name = sc_touchmap_read_package_name(output_path);
@@ -274,10 +278,13 @@ test_touchmap_package_metadata_helpers(void) {
     SDL_free(package_name);
 
     assert(sc_gptm_gamepad_touchmap_set_package_name(map, NULL));
+    assert(!sc_gptm_gamepad_touchmap_get_package_name(map));
     assert(save_touchmap_config(output_path, map));
     assert(!sc_touchmap_read_package_name(output_path));
 
     assert(sc_gptm_gamepad_touchmap_set_package_name(map, "example.final"));
+    assert(!strcmp(sc_gptm_gamepad_touchmap_get_package_name(map),
+                   "example.final"));
     assert(save_touchmap_config(output_path, map));
     package_name = sc_touchmap_read_package_name(output_path);
     assert(package_name);
@@ -310,7 +317,10 @@ test_empty_touchmap_create_save(void) {
     struct sc_gptm_gamepad_touchmap *map =
         sc_gptm_gamepad_touchmap_new_empty();
     assert(map);
+    assert(!sc_gptm_gamepad_touchmap_get_package_name(map));
     assert(sc_gptm_gamepad_touchmap_set_package_name(map, "mutation.game"));
+    assert(!strcmp(sc_gptm_gamepad_touchmap_get_package_name(map),
+                   "mutation.game"));
     assert(!map->has_walk);
     assert(map->button_cnt == 0);
 
