@@ -21,6 +21,7 @@ src = [
     'src/file_pusher.c',
     'src/fps_counter.c',
     'src/frame_buffer.c',
+    'src/fg_app_detect.c',
     'src/input_manager.c',
     'src/keyboard_sdk.c',
     'src/mouse_capture.c',
@@ -34,8 +35,10 @@ src = [
     'src/screen.c',
     'src/server.c',
     'src/touchmap.c',
+    'src/touchmap_loader.c',
     'src/touchmap_editor.c',
     'src/touchmap_overlay.c',
+    'src/touchmap_state.c',
     'src/version.c',
     'src/hid/hid_gamepad.c',
     'src/hid/hid_keyboard.c',
@@ -77,6 +80,7 @@ conf.set('_XOPEN_SOURCE', '700')
 conf.set('_GNU_SOURCE', true)
 
 if host_machine.system() == 'windows'
+    test_file_src = 'src/sys/win/file.c'
     windows = import('windows')
     src += [
         'src/sys/win/file.c',
@@ -86,6 +90,7 @@ if host_machine.system() == 'windows'
     conf.set('_WIN32_WINNT', '0x0600')
     conf.set('WINVER', '0x0600')
 else
+    test_file_src = 'src/sys/unix/file.c'
     src += [
         'src/sys/unix/file.c',
         'src/sys/unix/process.c',
@@ -266,6 +271,34 @@ if get_option('buildtype') == 'debug'
             'src/touchmap_overlay.c',
             'src/third_party/cjson/cJSON.c',
             'src/util/log.c',
+        ]],
+        ['test_touchmap_loader', [
+            'tests/test_touchmap_loader.c',
+            'src/touchmap.c',
+            'src/touchmap_loader.c',
+            'src/third_party/cjson/cJSON.c',
+            test_file_src,
+            'src/util/file.c',
+            'src/util/log.c',
+        ]],
+        ['test_touchmap_state', [
+            'tests/test_touchmap_state.c',
+            'src/touchmap.c',
+            'src/touchmap_state.c',
+            'src/touchmap_loader.c',
+            'src/touchmap_editor.c',
+            'src/third_party/cjson/cJSON.c',
+            test_file_src,
+            'src/util/file.c',
+            'src/util/log.c',
+        ]],
+        ['test_fg_app_detect', [
+            'tests/test_fg_app_detect.c',
+            'src/fg_app_detect.c',
+            'src/events.c',
+            'src/util/log.c',
+            'src/util/thread.c',
+            'src/util/tick.c',
         ]],
         ['test_strbuf', [
             'tests/test_strbuf.c',

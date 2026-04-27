@@ -30,6 +30,8 @@ _scrcpy() {
         --force-adb-forward
         -G
         --gamepad=
+        --gamepad-touchmap=
+        --gamepad-touchmap-dir=
         -h --help
         -K
         --keyboard=
@@ -139,6 +141,14 @@ _scrcpy() {
             ;;
         --gamepad)
             COMPREPLY=($(compgen -W 'disabled uhid aoa' -- "$cur"))
+            return
+            ;;
+        --gamepad-touchmap)
+            COMPREPLY=($(compgen -f -- "$cur"))
+            return
+            ;;
+        --gamepad-touchmap-dir)
+            COMPREPLY=($(compgen -d -- "$cur"))
             return
             ;;
         --capture-orientation)

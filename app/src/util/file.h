@@ -32,6 +32,15 @@ char *
 sc_file_get_executable_path(void);
 
 /**
+ * Return the canonical absolute path of an existing file or directory
+ *
+ * The result must be freed by the caller using free(). It may return NULL on
+ * error.
+ */
+char *
+sc_file_get_absolute_path(const char *path);
+
+/**
  * Return the absolute path of a file in the same directory as the executable
  *
  * The result must be freed by the caller using free(). It may return NULL on

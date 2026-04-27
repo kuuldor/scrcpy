@@ -215,7 +215,7 @@ sc_screen_render(struct sc_screen *screen, bool update_content_rect) {
 
     enum sc_display_result res =
         sc_display_render(&screen->display, &screen->rect, screen->orientation,
-                          &screen->im.touchmap_editor);
+                          &screen->im.touchmap);
     (void) res; // any error already logged
 }
 
@@ -439,13 +439,21 @@ sc_screen_init(struct sc_screen *screen,
         .gp = params->gp,
         .mouse_bindings = params->mouse_bindings,
         .touchmap_file = params->touchmap_file,
+        .touchmap_dir = params->touchmap_dir,
+        .device_serial = params->device_serial,
         .gamepad_input_mode = params->gamepad_input_mode,
         .legacy_paste = params->legacy_paste,
         .clipboard_autosync = params->clipboard_autosync,
         .shortcut_mods = params->shortcut_mods,
     };
 
-    sc_input_manager_init(&screen->im, &im_params);
+    if (!sc_input_manager_init(&screen->im, &im_params)) {
+        goto error_destroy_frame;
+    }
+    if (screen->im.touchmap.loader.enabled
+            && !sc_fg_app_detect_start(&screen->im.fg_app_detect)) {
+        goto error_destroy_input_manager;
+    }
 
     // Initialize even if not used for simplicity
     sc_mouse_capture_init(&screen->mc, screen->window, params->shortcut_mods);
@@ -475,6 +483,10 @@ sc_screen_init(struct sc_screen *screen,
 
     return true;
 
+error_destroy_input_manager:
+    sc_input_manager_destroy(&screen->im);
+error_destroy_frame:
+    av_frame_free(&screen->frame);
 error_destroy_display:
     sc_display_destroy(&screen->display);
 error_destroy_window:
@@ -521,6 +533,7 @@ sc_screen_hide_window(struct sc_screen *screen) {
 void
 sc_screen_interrupt(struct sc_screen *screen) {
     sc_fps_counter_interrupt(&screen->fps_counter);
+    sc_fg_app_detect_stop(&screen->im.fg_app_detect);
 }
 
 void
@@ -533,6 +546,7 @@ sc_screen_destroy(struct sc_screen *screen) {
 #ifndef NDEBUG
     assert(!screen->open);
 #endif
+    sc_input_manager_destroy(&screen->im);
     sc_display_destroy(&screen->display);
     av_frame_free(&screen->frame);
     SDL_DestroyWindow(screen->window);
@@ -813,6 +827,11 @@ sc_screen_handle_event(struct sc_screen *screen, const SDL_Event *event) {
             }
             return true;
         }
+        case SC_EVENT_SCREEN_REFRESH:
+            if (screen->video && screen->has_frame) {
+                sc_screen_render(screen, false);
+            }
+            return true;
         case SC_EVENT_NEW_FRAME: {
             bool ok = sc_screen_update_frame(screen);
             if (!ok) {

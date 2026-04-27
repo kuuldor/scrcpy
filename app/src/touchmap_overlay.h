@@ -7,12 +7,9 @@
 #include <SDL2/SDL.h>
 
 #include "touchmap.h"
-#include "touchmap_editor.h"
+#include "touchmap_state.h"
 #include "options.h"
 #include "coords.h"
-
-// Forward declaration to avoid circular includes
-struct sc_touchmap_overlay;
 
 enum sc_touchmap_overlay_control {
     SC_TOUCHMAP_OVERLAY_CONTROL_NONE,
@@ -40,25 +37,6 @@ enum sc_touchmap_overlay_control {
 #define SC_OVERLAY_EDIT_BORDER      0xFFFFFFB0
 
 /**
- * Initialize the touchmap overlay
- *
- * @param overlay The overlay structure to initialize
- * @param renderer The SDL renderer to use for drawing
- * @return true on success, false on error
- */
-bool
-sc_touchmap_overlay_init(struct sc_touchmap_overlay *overlay,
-                         SDL_Renderer *renderer);
-
-/**
- * Destroy the touchmap overlay and free resources
- *
- * @param overlay The overlay to destroy
- */
-void
-sc_touchmap_overlay_destroy(struct sc_touchmap_overlay *overlay);
-
-/**
  * Render the touchmap overlay on top of the display
  *
  * This function should be called after the main texture is rendered
@@ -71,55 +49,18 @@ sc_touchmap_overlay_destroy(struct sc_touchmap_overlay *overlay);
  * @return true on success, false on error
  */
 bool
-sc_touchmap_overlay_render(struct sc_touchmap_overlay *overlay,
-                           SDL_Renderer *renderer,
-                           const struct sc_gptm_gamepad_touchmap *touchmap,
+sc_touchmap_overlay_render(SDL_Renderer *renderer,
+                           const struct sc_touchmap_state *touchmap_state,
                            const struct sc_size *frame_size,
                            const SDL_Rect *content_rect,
-                           enum sc_orientation orientation,
-                           const struct sc_touchmap_editor *touchmap_editor);
-
-/**
- * Toggle overlay visibility
- *
- * @param overlay The overlay to toggle
- */
-void
-sc_touchmap_overlay_toggle(struct sc_touchmap_overlay *overlay);
-
-/**
- * Set overlay visibility
- *
- * @param overlay The overlay
- * @param enabled Whether to show the overlay
- */
-void
-sc_touchmap_overlay_set_enabled(struct sc_touchmap_overlay *overlay,
-                                bool enabled);
-
-/**
- * Check if overlay is currently enabled
- *
- * @param overlay The overlay
- * @return true if enabled, false otherwise
- */
-bool
-sc_touchmap_overlay_is_enabled(const struct sc_touchmap_overlay *overlay);
-
-void
-sc_touchmap_overlay_set_edit_mode(struct sc_touchmap_overlay *overlay,
-                                  bool edit_mode);
-
-bool
-sc_touchmap_overlay_is_edit_mode(const struct sc_touchmap_overlay *overlay);
+                           enum sc_orientation orientation);
 
 SDL_Rect
 sc_touchmap_overlay_get_edit_button_rect(const SDL_Rect *content_rect,
                                          bool edit_mode);
 
 enum sc_touchmap_overlay_control
-sc_touchmap_overlay_hit_control(struct sc_touchmap_overlay *overlay,
-                                const struct sc_gptm_gamepad_touchmap *touchmap,
+sc_touchmap_overlay_hit_control(struct sc_touchmap_state *touchmap_state,
                                 const SDL_Rect *content_rect,
                                 int32_t x, int32_t y);
 

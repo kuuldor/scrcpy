@@ -11,6 +11,9 @@ ninja
 
 # Run with touchmap
 ./app/scrcpy -G --gamepad-touchmap /path/to/touchmap.json
+
+# Or enable automatic touchmap selection by foreground app package
+./app/scrcpy -G --gamepad-touchmap-dir /path/to/touchmaps
 ```
 
 ## Keyboard Shortcuts
@@ -25,6 +28,25 @@ ninja
 
 The shortcut modifier is scrcpy's configured shortcut modifier. The save
 shortcuts are currently hard-coded to Ctrl.
+
+## Auto-Load Workflow
+
+- `--gamepad-touchmap-dir` enables automatic package-based touchmap selection.
+- Each participating JSON file must include top-level `packageName`.
+- When the foreground app changes, scrcpy resolves `packageName -> touchmap`
+  from that directory and loads the matching file.
+- If no file matches the current foreground app, the current auto-loaded
+  touchmap is unloaded.
+- If `--gamepad-touchmap` is also specified, that explicit file wins and
+  automatic switching is disabled for the session.
+- `Ctrl+T` during auto mode loads a manual override.
+- `Ctrl+Shift+T` clears the manual override and reapplies the current
+  foreground-app mapping.
+- `NEW` in auto mode seeds the new in-memory map with the current foreground
+  app `packageName` when known.
+- Save As inside the auto-load directory rebuilds the loader index. If the
+  saved file becomes the indexed match for the current foreground app, it
+  becomes the active auto-loaded map.
 
 ## Overlay Colors
 

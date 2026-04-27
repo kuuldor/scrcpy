@@ -10,8 +10,9 @@
 
 #include "controller.h"
 #include "file_pusher.h"
+#include "fg_app_detect.h"
 #include "options.h"
-#include "touchmap_editor.h"
+#include "touchmap_state.h"
 #include "trait/gamepad_processor.h"
 #include "trait/key_processor.h"
 #include "trait/mouse_processor.h"
@@ -24,13 +25,9 @@ struct sc_input_manager {
     struct sc_key_processor *kp;
     struct sc_mouse_processor *mp;
     struct sc_gamepad_processor *gp;
-    struct sc_gptm_gamepad_touchmap *game_touchmap;
     enum sc_gamepad_input_mode gamepad_input_mode;
-    const char *touchmap_file;
-    struct sc_touchmap_editor touchmap_editor;
-    bool touchmap_dirty;
-    bool touchmap_exit_after_save;
-    bool touchmap_consume_left_button_up;
+    struct sc_fg_app_detect fg_app_detect;
+    struct sc_touchmap_state touchmap;
 
     struct sc_mouse_bindings mouse_bindings;
     bool legacy_paste;
@@ -63,6 +60,8 @@ struct sc_input_manager_params {
     struct sc_gamepad_processor *gp;
     enum sc_gamepad_input_mode gamepad_input_mode;
     const char * touchmap_file;
+    const char * touchmap_dir;
+    const char * device_serial;
 
     struct sc_mouse_bindings mouse_bindings;
     bool forward_game_controllers;
@@ -72,9 +71,12 @@ struct sc_input_manager_params {
     uint8_t shortcut_mods; // OR of enum sc_shortcut_mod values
 };
 
-void
+bool
 sc_input_manager_init(struct sc_input_manager *im,
                       const struct sc_input_manager_params *params);
+
+void
+sc_input_manager_destroy(struct sc_input_manager *im);
 
 void sc_input_manager_handle_event(struct sc_input_manager *im,
                                     const SDL_Event *event);

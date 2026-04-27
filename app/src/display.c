@@ -98,16 +98,9 @@ sc_display_init(struct sc_display *display, SDL_Window *window,
     display->has_frame = false;
     display->frame_size = (struct sc_size) {0, 0};
 
-    // Initialize overlay
-    display->touchmap = NULL;
-    bool ok = sc_touchmap_overlay_init(&display->overlay, display->renderer);
-    if (!ok) {
-        LOGW("Could not initialize touchmap overlay");
-    }
-
     if (icon_novideo) {
         // Without video, set a static scrcpy icon as window content
-        ok = sc_display_init_novideo_icon(display, icon_novideo);
+        bool ok = sc_display_init_novideo_icon(display, icon_novideo);
         if (!ok) {
 #ifdef SC_DISPLAY_FORCE_OPENGL_CORE_PROFILE
             SDL_GL_DeleteContext(display->gl_context);
@@ -122,8 +115,6 @@ sc_display_init(struct sc_display *display, SDL_Window *window,
 
 void
 sc_display_destroy(struct sc_display *display) {
-    sc_touchmap_overlay_destroy(&display->overlay);
-    
     if (display->pending.frame) {
         av_frame_free(&display->pending.frame);
     }
@@ -314,7 +305,7 @@ sc_display_update_texture(struct sc_display *display, const AVFrame *frame) {
 enum sc_display_result
 sc_display_render(struct sc_display *display, const SDL_Rect *geometry,
                   enum sc_orientation orientation,
-                  const struct sc_touchmap_editor *touchmap_editor) {
+                  const struct sc_touchmap_state *touchmap_state) {
     SDL_RenderClear(display->renderer);
 
     if (display->pending.flags) {
@@ -361,23 +352,12 @@ sc_display_render(struct sc_display *display, const SDL_Rect *geometry,
 
     // Render the touchmap overlay on top. It may render a NEW control even
     // when no touchmap is attached yet.
-    if (sc_touchmap_overlay_is_enabled(&display->overlay)) {
-        sc_touchmap_overlay_render(&display->overlay, display->renderer,
-                                  display->touchmap, &display->frame_size,
-                                  dstrect, orientation, touchmap_editor);
+    if (touchmap_state && touchmap_state->overlay_enabled) {
+        sc_touchmap_overlay_render(display->renderer, touchmap_state,
+                                   &display->frame_size, dstrect,
+                                   orientation);
     }
 
     SDL_RenderPresent(display->renderer);
     return SC_DISPLAY_RESULT_OK;
-}
-
-void
-sc_display_set_touchmap(struct sc_display *display,
-                        const struct sc_gptm_gamepad_touchmap *touchmap) {
-    display->touchmap = touchmap;
-}
-
-void
-sc_display_toggle_overlay(struct sc_display *display) {
-    sc_touchmap_overlay_toggle(&display->overlay);
 }

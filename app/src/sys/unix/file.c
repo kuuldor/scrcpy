@@ -13,6 +13,36 @@
 
 #include "util/log.h"
 
+static char *
+sc_file_expand_home_path(const char *path) {
+    if (!path || path[0] != '~') {
+        return strdup(path);
+    }
+
+    if (path[1] != '\0' && path[1] != '/') {
+        LOGE("Unsupported home path syntax: %s", path);
+        return NULL;
+    }
+
+    const char *home = getenv("HOME");
+    if (!home || !*home) {
+        LOGE("HOME is not set");
+        return NULL;
+    }
+
+    size_t home_len = strlen(home);
+    size_t suffix_len = strlen(path + 1);
+    char *expanded = malloc(home_len + suffix_len + 1);
+    if (!expanded) {
+        LOG_OOM();
+        return NULL;
+    }
+
+    memcpy(expanded, home, home_len);
+    memcpy(expanded + home_len, path + 1, suffix_len + 1);
+    return expanded;
+}
+
 bool
 sc_file_executable_exists(const char *file) {
     char *path = getenv("PATH");
@@ -83,6 +113,21 @@ sc_file_get_executable_path(void) {
 #endif
 }
 
+char *
+sc_file_get_absolute_path(const char *path) {
+    char *expanded_path = sc_file_expand_home_path(path);
+    if (!expanded_path) {
+        return NULL;
+    }
+
+    char *result = realpath(expanded_path, NULL);
+    free(expanded_path);
+    if (!result) {
+        perror("realpath");
+    }
+    return result;
+}
+
 bool
 sc_file_is_regular(const char *path) {
     struct stat path_stat;
@@ -93,4 +138,3 @@ sc_file_is_regular(const char *path) {
     }
     return S_ISREG(path_stat.st_mode);
 }
-
