@@ -218,6 +218,16 @@ Possible values are "disabled", "uhid" and "aoa":
 
 Also see \fB\-\-keyboard\f and R\fB\-\-mouse\fR.
 .TP
+.BI "\-\-gamepad\-touchmap " map_file
+Specify config file mapping game controller input to touch.
+
+.TP
+.BI "\-\-gamepad\-touchmap\-dir " directory
+Specify a directory of gamepad-touchmap files to load automatically by foreground Android package.
+
+If \fB\-\-gamepad\-touchmap\fR is also provided, the explicit file takes precedence and automatic selection is disabled.
+
+.TP
 .B \-h, \-\-help
 Print this help.
 

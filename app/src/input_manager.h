@@ -27,6 +27,7 @@ struct sc_input_manager {
     struct sc_gptm_gamepad_touchmap *game_touchmap;
     enum sc_gamepad_input_mode gamepad_input_mode;
     const char *touchmap_file;
+    const char *touchmap_dir;
     struct sc_touchmap_editor touchmap_editor;
     bool touchmap_dirty;
     bool touchmap_exit_after_save;
@@ -63,6 +64,7 @@ struct sc_input_manager_params {
     struct sc_gamepad_processor *gp;
     enum sc_gamepad_input_mode gamepad_input_mode;
     const char * touchmap_file;
+    const char * touchmap_dir;
 
     struct sc_mouse_bindings mouse_bindings;
     bool forward_game_controllers;

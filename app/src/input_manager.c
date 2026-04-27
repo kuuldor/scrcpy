@@ -42,6 +42,7 @@ sc_input_manager_init(struct sc_input_manager *im,
     im->mouse_bindings = params->mouse_bindings;
     im->touchmap_file = params->touchmap_file ? SDL_strdup(params->touchmap_file)
                                                : NULL;
+    im->touchmap_dir = params->touchmap_dir;
     im->gamepad_input_mode = params->gamepad_input_mode;
     sc_touchmap_editor_init(&im->touchmap_editor);
     im->touchmap_dirty = false;

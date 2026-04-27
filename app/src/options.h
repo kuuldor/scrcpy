@@ -243,6 +243,7 @@ struct scrcpy_options {
     const char *camera_size;
     const char *camera_ar;
     const char *touchmap_file;
+    const char *touchmap_dir;
     uint16_t camera_fps;
     enum sc_log_level log_level;
     enum sc_codec video_codec;

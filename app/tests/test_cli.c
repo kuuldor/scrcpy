@@ -67,6 +67,8 @@ static void test_options(void) {
         "--window-width", "600",
         "--window-height", "0",
         "--window-borderless",
+        "--gamepad-touchmap", "/tmp/manual-touchmap.json",
+        "--gamepad-touchmap-dir", "/tmp/touchmaps",
     };
 
     bool ok = scrcpy_parse_args(&args, ARRAY_LEN(argv), argv);
@@ -94,6 +96,8 @@ static void test_options(void) {
     assert(opts->window_width == 600);
     assert(opts->window_height == 0);
     assert(opts->window_borderless);
+    assert(!strcmp(opts->touchmap_file, "/tmp/manual-touchmap.json"));
+    assert(!opts->touchmap_dir);
 }
 
 static void test_options2(void) {
@@ -119,6 +123,26 @@ static void test_options2(void) {
     assert(!opts->audio_playback);
     assert(!strcmp(opts->record_filename, "file.mp4"));
     assert(opts->record_format == SC_RECORD_FORMAT_MP4);
+}
+
+static void test_touchmap_dir(void) {
+    struct scrcpy_cli_args args = {
+        .opts = scrcpy_options_default,
+        .help = false,
+        .version = false,
+    };
+
+    char *argv[] = {
+        "scrcpy",
+        "--gamepad-touchmap-dir", "/tmp/touchmaps",
+    };
+
+    bool ok = scrcpy_parse_args(&args, ARRAY_LEN(argv), argv);
+    assert(ok);
+
+    const struct scrcpy_options *opts = &args.opts;
+    assert(!opts->touchmap_file);
+    assert(!strcmp(opts->touchmap_dir, "/tmp/touchmaps"));
 }
 
 static void test_parse_shortcut_mods(void) {
@@ -157,6 +181,7 @@ int main(int argc, char *argv[]) {
     test_flag_help();
     test_options();
     test_options2();
+    test_touchmap_dir();
     test_parse_shortcut_mods();
     return 0;
 }

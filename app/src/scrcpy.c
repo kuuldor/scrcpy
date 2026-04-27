@@ -834,6 +834,7 @@ aoa_complete:
             .gp = gp,
             .mouse_bindings = options->mouse_bindings,
             .touchmap_file = options->touchmap_file,
+            .touchmap_dir = options->touchmap_dir,
             .gamepad_input_mode = options->gamepad_input_mode,
             .legacy_paste = options->legacy_paste,
             .clipboard_autosync = options->clipboard_autosync,
