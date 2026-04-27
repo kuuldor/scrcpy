@@ -239,14 +239,78 @@ test_empty_touchmap_parse_save(void) {
 }
 
 static void
+test_touchmap_package_metadata_helpers(void) {
+    const char *input_path = "test_touchmap_package_input.json";
+    const char *missing_path = "test_touchmap_package_missing.json";
+    const char *output_path = "test_touchmap_package_output.json";
+
+    const char *json =
+        "{"
+        "  \"packageName\": \"example.initial\","
+        "  \"mappings\": {"
+        "    \"button_mappings\": [],"
+        "    \"skill_casting\": []"
+        "  }"
+        "}";
+    assert(write_file(input_path, json));
+
+    char *package_name = sc_touchmap_read_package_name(input_path);
+    assert(package_name);
+    assert(!strcmp(package_name, "example.initial"));
+    SDL_free(package_name);
+
+    assert(write_file(missing_path, "{\"mappings\": {}}"));
+    assert(!sc_touchmap_read_package_name(missing_path));
+
+    struct sc_gptm_gamepad_touchmap *map = parse_touchmap_config(input_path);
+    assert(map);
+
+    assert(sc_gptm_gamepad_touchmap_set_package_name(map, "example.changed"));
+    assert(save_touchmap_config(output_path, map));
+
+    package_name = sc_touchmap_read_package_name(output_path);
+    assert(package_name);
+    assert(!strcmp(package_name, "example.changed"));
+    SDL_free(package_name);
+
+    assert(sc_gptm_gamepad_touchmap_set_package_name(map, NULL));
+    assert(save_touchmap_config(output_path, map));
+    assert(!sc_touchmap_read_package_name(output_path));
+
+    assert(sc_gptm_gamepad_touchmap_set_package_name(map, "example.final"));
+    assert(save_touchmap_config(output_path, map));
+    package_name = sc_touchmap_read_package_name(output_path);
+    assert(package_name);
+    assert(!strcmp(package_name, "example.final"));
+    SDL_free(package_name);
+
+    char *filename = sc_touchmap_build_default_filename("example.final");
+    assert(filename);
+    assert(!strcmp(filename, "example.final.json"));
+    SDL_free(filename);
+
+    filename = sc_touchmap_build_default_filename("bad/package\\name");
+    assert(filename);
+    assert(!strcmp(filename, "bad_package_name.json"));
+    SDL_free(filename);
+
+    assert(!sc_touchmap_build_default_filename(NULL));
+    assert(!sc_touchmap_build_default_filename(""));
+
+    sc_gptm_gamepad_touchmap_destroy(map);
+    remove(input_path);
+    remove(missing_path);
+    remove(output_path);
+}
+
+static void
 test_empty_touchmap_create_save(void) {
     const char *output_path = "test_touchmap_new_empty_output.json";
 
     struct sc_gptm_gamepad_touchmap *map =
         sc_gptm_gamepad_touchmap_new_empty();
     assert(map);
-    assert(cJSON_AddStringToObject(map->json_root, "packageName",
-                                   "mutation.game"));
+    assert(sc_gptm_gamepad_touchmap_set_package_name(map, "mutation.game"));
     assert(!map->has_walk);
     assert(map->button_cnt == 0);
 
@@ -279,8 +343,7 @@ test_touchmap_mutation_helpers(void) {
     struct sc_gptm_gamepad_touchmap *map =
         sc_gptm_gamepad_touchmap_new_empty();
     assert(map);
-    assert(cJSON_AddStringToObject(map->json_root, "packageName",
-                                   "mutation.game"));
+    assert(sc_gptm_gamepad_touchmap_set_package_name(map, "mutation.game"));
 
     assert(sc_gptm_gamepad_touchmap_set_walk(
         map, (struct sc_point) {100, 200}, 10));
@@ -536,6 +599,7 @@ main(int argc, char *argv[]) {
 
     test_parse_save_preserves_metadata();
     test_empty_touchmap_parse_save();
+    test_touchmap_package_metadata_helpers();
     test_empty_touchmap_create_save();
     test_touchmap_mutation_helpers();
     test_overlay_coordinate_transforms();

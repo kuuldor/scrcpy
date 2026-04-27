@@ -9,6 +9,10 @@
 #include <SDL2/SDL.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
+
+static bool
+replace_or_add(cJSON *object, const char *name, cJSON *item);
 
 static SDL_GameControllerButton button_name_to_value(const char *button_name) {
     if (strcmp(button_name, "A") == 0) return SDL_CONTROLLER_BUTTON_A;
@@ -107,6 +111,119 @@ sc_gptm_next_finger_id(const struct sc_gptm_gamepad_touchmap *map) {
     }
 
     return finger_id;
+}
+
+char *
+sc_touchmap_read_package_name(const char *filename) {
+    if (!filename) {
+        return NULL;
+    }
+
+    FILE *file = fopen(filename, "rb");
+    if (!file) {
+        LOGE("Failed to open touchmap file: %s", filename);
+        return NULL;
+    }
+
+    if (fseek(file, 0, SEEK_END)) {
+        LOGE("Failed to seek touchmap file: %s", filename);
+        fclose(file);
+        return NULL;
+    }
+
+    long filesize = ftell(file);
+    if (filesize < 0) {
+        LOGE("Failed to get touchmap file size: %s", filename);
+        fclose(file);
+        return NULL;
+    }
+    rewind(file);
+
+    char *json_string = SDL_malloc((size_t) filesize + 1);
+    if (!json_string) {
+        LOG_OOM();
+        fclose(file);
+        return NULL;
+    }
+
+    size_t read = fread(json_string, 1, (size_t) filesize, file);
+    fclose(file);
+    if (read != (size_t) filesize) {
+        LOGE("Failed to read touchmap file: %s", filename);
+        SDL_free(json_string);
+        return NULL;
+    }
+
+    json_string[filesize] = '\0';
+
+    cJSON *root = cJSON_Parse(json_string);
+    if (!root) {
+        LOGE("Error parsing touchmap JSON: %s", cJSON_GetErrorPtr());
+        SDL_free(json_string);
+        return NULL;
+    }
+    SDL_free(json_string);
+
+    cJSON *package_name =
+        cJSON_GetObjectItemCaseSensitive(root, "packageName");
+    char *result = cJSON_IsString(package_name)
+                 ? SDL_strdup(package_name->valuestring) : NULL;
+    if (!result && cJSON_IsString(package_name)) {
+        LOG_OOM();
+    }
+    cJSON_Delete(root);
+    return result;
+}
+
+bool
+sc_gptm_gamepad_touchmap_set_package_name(
+        struct sc_gptm_gamepad_touchmap *map, const char *package_name) {
+    if (!map) {
+        return false;
+    }
+
+    if (!map->json_root) {
+        map->json_root = cJSON_CreateObject();
+        if (!map->json_root) {
+            return false;
+        }
+    }
+
+    if (!package_name || !*package_name) {
+        cJSON_DeleteItemFromObjectCaseSensitive(map->json_root, "packageName");
+        return true;
+    }
+
+    cJSON *item = cJSON_CreateString(package_name);
+    if (!item) {
+        return false;
+    }
+
+    return replace_or_add(map->json_root, "packageName", item);
+}
+
+char *
+sc_touchmap_build_default_filename(const char *package_name) {
+    if (!package_name || !*package_name) {
+        return NULL;
+    }
+
+    size_t len = strlen(package_name);
+    char *filename = SDL_malloc(len + strlen(".json") + 1);
+    if (!filename) {
+        LOG_OOM();
+        return NULL;
+    }
+
+    memcpy(filename, package_name, len);
+    for (size_t i = 0; i < len; ++i) {
+        if (filename[i] == '/' || filename[i] == '\\') {
+            filename[i] = '_';
+        }
+    }
+
+    memcpy(filename + len, ".json", strlen(".json") + 1);
+    return filename;
 }
 
 void
