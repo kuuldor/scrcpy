@@ -640,7 +640,6 @@ sc_touchmap_overlay_render(SDL_Renderer *renderer,
 
     const struct sc_gptm_gamepad_touchmap *touchmap = touchmap_state->map;
     if (!touchmap) {
-        // EDIT button now rendered by UI layer - disabled here
         SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
         return true;
     }
@@ -747,23 +746,8 @@ sc_touchmap_overlay_render(SDL_Renderer *renderer,
     if (touchmap_state->edit_mode) {
         draw_touchmap_selection(renderer, touchmap, frame_size, content_rect,
                                 orientation, &touchmap_state->editor);
-        // Toolbar and edit button now rendered by UI layer - disabled here
-    } else {
-        // EDIT button now rendered by UI layer - disabled here
     }
 
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
     return true;
-}
-
-enum sc_touchmap_overlay_control
-sc_touchmap_overlay_hit_control(struct sc_touchmap_state *touchmap_state,
-                                const SDL_Rect *content_rect,
-                                int32_t x, int32_t y) {
-    // Hit control now handled by UI layer - disable old implementation
-    (void) touchmap_state;
-    (void) content_rect;
-    (void) x;
-    (void) y;
-return SC_TOUCHMAP_OVERLAY_CONTROL_NONE;
 }

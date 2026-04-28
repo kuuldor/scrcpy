@@ -881,114 +881,6 @@ sc_touchmap_capture_binding(struct sc_input_manager *im, uint8_t button) {
     return captured;
 }
 
-static bool
-sc_touchmap_toggle_edit_mode(struct sc_input_manager *im, int32_t x, int32_t y) {
-    if (!im->touchmap.overlay_enabled) {
-        return false;
-    }
-
-    enum sc_touchmap_overlay_control control =
-        sc_touchmap_overlay_hit_control(&im->touchmap, &im->screen->rect,
-                                        x, y);
-    if (control == SC_TOUCHMAP_OVERLAY_CONTROL_NONE) {
-        return false;
-    }
-
-    switch (control) {
-        case SC_TOUCHMAP_OVERLAY_CONTROL_NEW:
-            assert(!im->touchmap.map);
-            create_empty_touchmap(im);
-            return true;
-        case SC_TOUCHMAP_OVERLAY_CONTROL_EDIT:
-            assert(im->touchmap.map);
-            sc_touchmap_release_active_touches(im);
-            sc_touchmap_state_set_edit_mode(&im->touchmap, true);
-            sc_touchmap_editor_set_mode(&im->touchmap.editor,
-                                        SC_TOUCHMAP_EDITOR_MODE_SELECT);
-            sc_touchmap_request_screen_refresh(im);
-            return true;
-        case SC_TOUCHMAP_OVERLAY_CONTROL_ADD:
-            sc_touchmap_editor_set_mode(
-                &im->touchmap.editor,
-                im->touchmap.add_menu_open
-                    ? SC_TOUCHMAP_EDITOR_MODE_ADD_MENU
-                    : SC_TOUCHMAP_EDITOR_MODE_SELECT);
-            sc_touchmap_request_screen_refresh(im);
-            return true;
-        case SC_TOUCHMAP_OVERLAY_CONTROL_DEL:
-            sc_touchmap_delete_selected_control(im);
-            sc_touchmap_request_screen_refresh(im);
-            return true;
-        case SC_TOUCHMAP_OVERLAY_CONTROL_ADD_BUTTON:
-            sc_touchmap_editor_set_mode(&im->touchmap.editor,
-                                        SC_TOUCHMAP_EDITOR_MODE_PLACE_BUTTON);
-            sc_touchmap_request_screen_refresh(im);
-            return true;
-        case SC_TOUCHMAP_OVERLAY_CONTROL_ADD_SKILL:
-            sc_touchmap_editor_set_mode(&im->touchmap.editor,
-                                        SC_TOUCHMAP_EDITOR_MODE_PLACE_SKILL);
-            sc_touchmap_request_screen_refresh(im);
-            return true;
-        case SC_TOUCHMAP_OVERLAY_CONTROL_ADD_WALK:
-            sc_touchmap_editor_set_mode(
-                &im->touchmap.editor,
-                im->touchmap.map && im->touchmap.map->has_walk
-                    ? SC_TOUCHMAP_EDITOR_MODE_SELECT
-                    : SC_TOUCHMAP_EDITOR_MODE_PLACE_WALK);
-            sc_touchmap_request_screen_refresh(im);
-            return true;
-        case SC_TOUCHMAP_OVERLAY_CONTROL_QUIT:
-            assert(im->touchmap.map);
-            sc_touchmap_editor_set_mode(&im->touchmap.editor,
-                                        SC_TOUCHMAP_EDITOR_MODE_SELECT);
-            break;
-        default:
-            return true;
-    }
-
-    if (!im->touchmap.map) {
-        create_empty_touchmap(im);
-        return true;
-    }
-
-    assert(im->touchmap.edit_mode);
-
-    if (!im->touchmap.dirty) {
-        im->touchmap.exit_after_save = false;
-        sc_touchmap_state_set_edit_mode(&im->touchmap, false);
-        sc_touchmap_request_screen_refresh(im);
-        sc_touchmap_maybe_apply_deferred_switch(im);
-        return true;
-    }
-
-    int choice = tinyfd_messageBox(
-        "Save Touch Map?",
-        "Save changes before exiting edit mode?",
-        "yesnocancel",
-        "question",
-        1);
-
-    if (choice == 1) {
-        im->touchmap.exit_after_save = true;
-        sc_start_thread("SaveTouchMap", save_touchmap_dialog_thread, im);
-    } else if (choice == 2) {
-        if (!im->touchmap.file) {
-            free_up_touchmap(im);
-            sc_touchmap_state_set_edit_mode(&im->touchmap, false);
-            sc_touchmap_request_screen_refresh(im);
-            sc_touchmap_maybe_apply_deferred_switch(im);
-        } else if (sc_touchmap_reload_current_file(im)) {
-            sc_touchmap_state_set_edit_mode(&im->touchmap, false);
-            sc_touchmap_request_screen_refresh(im);
-            sc_touchmap_maybe_apply_deferred_switch(im);
-        }
-    } else {
-        im->touchmap.exit_after_save = false;
-    }
-
-    return true;
-}
-
 void
 sc_input_manager_process_pending_touchmap_control(
     struct sc_input_manager *im) {
@@ -1802,16 +1694,6 @@ sc_input_manager_process_mouse_button(struct sc_input_manager *im,
             && im->touchmap.consume_left_button_up) {
         im->touchmap.consume_left_button_up = false;
         return;
-    }
-
-    if (down && event->button == SDL_BUTTON_LEFT) {
-        int32_t x = event->x;
-        int32_t y = event->y;
-        sc_screen_hidpi_scale_coords(im->screen, &x, &y);
-        if (sc_touchmap_toggle_edit_mode(im, x, y)) {
-            im->touchmap.consume_left_button_up = true;
-            return;
-        }
     }
 
     if (sc_touchmap_edit_mode_active(im)) {

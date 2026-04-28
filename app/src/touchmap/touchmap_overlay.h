@@ -40,11 +40,6 @@ sc_touchmap_overlay_render(SDL_Renderer *renderer,
                            const SDL_Rect *content_rect,
                            enum sc_orientation orientation);
 
-enum sc_touchmap_overlay_control
-sc_touchmap_overlay_hit_control(struct sc_touchmap_state *touchmap_state,
-                                const SDL_Rect *content_rect,
-                                int32_t x, int32_t y);
-
 #ifdef SC_TEST
 struct sc_point
 sc_touchmap_overlay_transform_point(const struct sc_point *point,
