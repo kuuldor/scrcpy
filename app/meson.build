@@ -45,6 +45,7 @@ src = [
     'src/ui/ui_draw.c',
     'src/ui/ui_text.c',
     'src/ui/ui_widget_button.c',
+    'src/ui/ui_widget_menu.c',
     'src/ui/ui_widget_panel.c',
     'src/ui/ui_widget_toolbar.c',
     'src/version.c',
