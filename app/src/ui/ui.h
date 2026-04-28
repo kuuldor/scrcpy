@@ -15,6 +15,7 @@
 #include "ui_widget_button.h"
 #include "ui_widget_menu.h"
 #include "ui_widget_panel.h"
+#include "ui_widget_separator.h"
 #include "ui_widget_toolbar.h"
 
 #endif

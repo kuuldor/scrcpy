@@ -6,6 +6,7 @@
 #include "ui_id.h"
 #include "ui_widget_button.h"
 #include "ui_widget_menu.h"
+#include "ui_widget_separator.h"
 #include "ui_widget_toolbar.h"
 #include "util/log.h"
 
@@ -20,7 +21,7 @@
 static SDL_Rect
 sc_ui_demo_layer_get_menu_rect(const struct sc_ui_demo_layer *demo) {
     SDL_Rect anchor = demo->secondary_button.rect;
-    int item_count = 2;
+    int item_count = 3;
     return (SDL_Rect) {
         .x = anchor.x,
         .y = anchor.y + anchor.h + SC_UI_DEMO_MENU_GAP,
@@ -151,7 +152,8 @@ sc_ui_demo_layer_render(struct sc_ui_layer *layer,
                                                                 1);
     demo->menu.panel.rect = sc_ui_demo_layer_get_menu_rect(demo);
     demo->menu_item_one.rect = sc_ui_widget_menu_get_item_rect(&demo->menu, 0);
-    demo->menu_item_two.rect = sc_ui_widget_menu_get_item_rect(&demo->menu, 1);
+    demo->menu_separator.rect = sc_ui_widget_menu_get_item_rect(&demo->menu, 1);
+    demo->menu_item_two.rect = sc_ui_widget_menu_get_item_rect(&demo->menu, 2);
 
     bool ok = sc_ui_widget_toolbar_render(&demo->toolbar, render_ctx);
 
@@ -212,6 +214,7 @@ sc_ui_demo_layer_render(struct sc_ui_layer *layer,
     if (demo->menu_open) {
         ok &= sc_ui_widget_menu_render(&demo->menu, render_ctx);
         ok &= sc_ui_widget_button_render(&demo->menu_item_one, render_ctx);
+        ok &= sc_ui_widget_separator_render(&demo->menu_separator, render_ctx);
         ok &= sc_ui_widget_button_render(&demo->menu_item_two, render_ctx);
     }
     return ok;
@@ -352,7 +355,7 @@ sc_ui_demo_layer_init(struct sc_ui_demo_layer *demo) {
         .x = 0,
         .y = 0,
         .w = menu_item_width + 2 * SC_UI_DEMO_MENU_PADDING,
-        .h = 2 * menu_item_height + SC_UI_DEMO_GAP
+        .h = 3 * menu_item_height + 2 * SC_UI_DEMO_GAP
            + 2 * SC_UI_DEMO_MENU_PADDING,
     };
     struct sc_ui_widget_menu_style menu_style = {
@@ -370,6 +373,13 @@ sc_ui_demo_layer_init(struct sc_ui_demo_layer *demo) {
     sc_ui_widget_button_init(&demo->menu_item_one,
                              sc_ui_id_from_u32(demo, 3), &rect, "FIRST",
                              &menu_button_style);
+    struct sc_ui_widget_separator_style separator_style = {
+        .color = sc_ui_color_rgba(0xFF, 0xFF, 0xFF, 0x40),
+        .thickness = 1,
+        .inset = 6,
+    };
+    sc_ui_widget_separator_init(&demo->menu_separator, &rect,
+                                &separator_style);
     sc_ui_widget_button_init(&demo->menu_item_two,
                              sc_ui_id_from_u32(demo, 4), &rect, "SECOND",
                              &menu_button_style);
