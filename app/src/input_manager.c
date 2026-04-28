@@ -989,6 +989,100 @@ sc_touchmap_toggle_edit_mode(struct sc_input_manager *im, int32_t x, int32_t y) 
     return true;
 }
 
+void
+sc_input_manager_process_pending_touchmap_control(
+    struct sc_input_manager *im) {
+    enum sc_touchmap_overlay_control control =
+        im->touchmap.pending_control;
+    if (control == SC_TOUCHMAP_OVERLAY_CONTROL_NONE) {
+        return;
+    }
+    im->touchmap.pending_control = SC_TOUCHMAP_OVERLAY_CONTROL_NONE;
+
+    switch (control) {
+        case SC_TOUCHMAP_OVERLAY_CONTROL_NEW:
+            assert(!im->touchmap.map);
+            create_empty_touchmap(im);
+            break;
+        case SC_TOUCHMAP_OVERLAY_CONTROL_EDIT:
+            assert(im->touchmap.map);
+            sc_touchmap_release_active_touches(im);
+            sc_touchmap_state_set_edit_mode(&im->touchmap, true);
+            sc_touchmap_editor_set_mode(&im->touchmap.editor,
+                                        SC_TOUCHMAP_EDITOR_MODE_SELECT);
+            sc_touchmap_request_screen_refresh(im);
+            break;
+        case SC_TOUCHMAP_OVERLAY_CONTROL_ADD:
+            sc_touchmap_editor_set_mode(
+                &im->touchmap.editor,
+                im->touchmap.add_menu_open
+                    ? SC_TOUCHMAP_EDITOR_MODE_ADD_MENU
+                    : SC_TOUCHMAP_EDITOR_MODE_SELECT);
+            sc_touchmap_request_screen_refresh(im);
+            break;
+        case SC_TOUCHMAP_OVERLAY_CONTROL_DEL:
+            sc_touchmap_delete_selected_control(im);
+            sc_touchmap_request_screen_refresh(im);
+            break;
+        case SC_TOUCHMAP_OVERLAY_CONTROL_ADD_BUTTON:
+            sc_touchmap_editor_set_mode(&im->touchmap.editor,
+                                        SC_TOUCHMAP_EDITOR_MODE_PLACE_BUTTON);
+            sc_touchmap_request_screen_refresh(im);
+            break;
+        case SC_TOUCHMAP_OVERLAY_CONTROL_ADD_SKILL:
+            sc_touchmap_editor_set_mode(&im->touchmap.editor,
+                                        SC_TOUCHMAP_EDITOR_MODE_PLACE_SKILL);
+            sc_touchmap_request_screen_refresh(im);
+            break;
+        case SC_TOUCHMAP_OVERLAY_CONTROL_ADD_WALK:
+            sc_touchmap_editor_set_mode(
+                &im->touchmap.editor,
+                im->touchmap.map && im->touchmap.map->has_walk
+                    ? SC_TOUCHMAP_EDITOR_MODE_SELECT
+                    : SC_TOUCHMAP_EDITOR_MODE_PLACE_WALK);
+            sc_touchmap_request_screen_refresh(im);
+            break;
+        case SC_TOUCHMAP_OVERLAY_CONTROL_QUIT:
+            assert(im->touchmap.map);
+            sc_touchmap_editor_set_mode(&im->touchmap.editor,
+                                        SC_TOUCHMAP_EDITOR_MODE_SELECT);
+            if (!im->touchmap.dirty) {
+                im->touchmap.exit_after_save = false;
+                sc_touchmap_state_set_edit_mode(&im->touchmap, false);
+                sc_touchmap_request_screen_refresh(im);
+                sc_touchmap_maybe_apply_deferred_switch(im);
+                return;
+            } else { 
+                // Dirty - show save dialog
+                int choice = tinyfd_messageBox(
+                    "Save Touch Map?",
+                    "Save changes before exiting edit mode?",
+                    "yesnocancel",
+                    "question",
+                    1);
+
+                if (choice == 1) {
+                    im->touchmap.exit_after_save = true;
+                    sc_start_thread("SaveTouchMap", save_touchmap_dialog_thread, im);
+                } else if (choice == 2) {
+                    if (!im->touchmap.file) {
+                        free_up_touchmap(im);
+                    } else if (sc_touchmap_reload_current_file(im)) {
+                        // keep the map but exit edit mode
+                    }
+                    sc_touchmap_state_set_edit_mode(&im->touchmap, false);
+                    sc_touchmap_request_screen_refresh(im);
+                    sc_touchmap_maybe_apply_deferred_switch(im);
+                } else {
+                    im->touchmap.exit_after_save = false;
+                }
+            }
+            break;
+        default:
+            return;
+    }
+}
+
 static int open_file_dialog_thread(void *data) {
     struct sc_input_manager *im = (struct sc_input_manager *)data;
     (void)im;

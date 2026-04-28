@@ -7,6 +7,7 @@
 
 #include "ui_layer.h"
 #include "ui_widget_button.h"
+#include "ui_widget_label.h"
 #include "ui_widget_menu.h"
 #include "ui_widget_toolbar.h"
 #include "ui_widget_separator.h"
@@ -17,6 +18,7 @@ struct sc_ui_demo_layer {
     struct sc_ui_widget_button primary_button;
     struct sc_ui_widget_button secondary_button;
     struct sc_ui_widget_menu menu;
+    struct sc_ui_widget_label menu_label;
     struct sc_ui_widget_button menu_item_one;
     struct sc_ui_widget_separator menu_separator;
     struct sc_ui_widget_button menu_item_two;

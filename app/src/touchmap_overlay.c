@@ -929,9 +929,7 @@ sc_touchmap_overlay_render(SDL_Renderer *renderer,
 
     const struct sc_gptm_gamepad_touchmap *touchmap = touchmap_state->map;
     if (!touchmap) {
-        SDL_Rect edit_rect = sc_touchmap_overlay_get_edit_button_rect(
-            content_rect, false);
-        draw_edit_button(renderer, &edit_rect, false, false);
+        // EDIT button now rendered by UI layer - disabled here
         SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
         return true;
     }
@@ -1038,11 +1036,9 @@ sc_touchmap_overlay_render(SDL_Renderer *renderer,
     if (touchmap_state->edit_mode) {
         draw_touchmap_selection(renderer, touchmap, frame_size, content_rect,
                                 orientation, &touchmap_state->editor);
-        draw_touchmap_toolbar(renderer, touchmap_state, content_rect);
+        // Toolbar and edit button now rendered by UI layer - disabled here
     } else {
-        SDL_Rect edit_rect = sc_touchmap_overlay_get_edit_button_rect(
-            content_rect, false);
-        draw_edit_button(renderer, &edit_rect, true, false);
+        // EDIT button now rendered by UI layer - disabled here
     }
 
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
@@ -1053,62 +1049,10 @@ enum sc_touchmap_overlay_control
 sc_touchmap_overlay_hit_control(struct sc_touchmap_state *touchmap_state,
                                 const SDL_Rect *content_rect,
                                 int32_t x, int32_t y) {
-    const struct sc_gptm_gamepad_touchmap *touchmap = touchmap_state->map;
-
-    if (!touchmap_state->overlay_enabled || !content_rect) {
-        return SC_TOUCHMAP_OVERLAY_CONTROL_NONE;
-    }
-
-    if (!touchmap) {
-        SDL_Rect rect = sc_touchmap_overlay_get_edit_button_rect(content_rect,
-                                                                 false);
-        return point_in_rect(x, y, &rect) ? SC_TOUCHMAP_OVERLAY_CONTROL_NEW
-                                          : SC_TOUCHMAP_OVERLAY_CONTROL_NONE;
-    }
-
-    if (!touchmap_state->edit_mode) {
-        SDL_Rect rect = sc_touchmap_overlay_get_edit_button_rect(content_rect,
-                                                                 false);
-        return point_in_rect(x, y, &rect) ? SC_TOUCHMAP_OVERLAY_CONTROL_EDIT
-                                          : SC_TOUCHMAP_OVERLAY_CONTROL_NONE;
-    }
-
-    if (touchmap_state->add_menu_open) {
-        static const enum sc_touchmap_overlay_control menu_items[] = {
-            SC_TOUCHMAP_OVERLAY_CONTROL_ADD_BUTTON,
-            SC_TOUCHMAP_OVERLAY_CONTROL_ADD_SKILL,
-            SC_TOUCHMAP_OVERLAY_CONTROL_ADD_WALK,
-        };
-
-        for (size_t i = 0; i < ARRAY_LEN(menu_items); ++i) {
-            SDL_Rect rect = overlay_get_add_menu_item_rect(content_rect,
-                                                           menu_items[i]);
-            if (point_in_rect(x, y, &rect)) {
-                touchmap_state->add_menu_open = false;
-                return menu_items[i];
-            }
-        }
-    }
-
-    static const enum sc_touchmap_overlay_control toolbar_items[] = {
-        SC_TOUCHMAP_OVERLAY_CONTROL_ADD,
-        SC_TOUCHMAP_OVERLAY_CONTROL_DEL,
-        SC_TOUCHMAP_OVERLAY_CONTROL_QUIT,
-    };
-
-    for (size_t i = 0; i < ARRAY_LEN(toolbar_items); ++i) {
-        SDL_Rect rect = overlay_get_toolbar_button_rect(content_rect,
-                                                        toolbar_items[i]);
-        if (point_in_rect(x, y, &rect)) {
-            if (toolbar_items[i] == SC_TOUCHMAP_OVERLAY_CONTROL_ADD) {
-                touchmap_state->add_menu_open = !touchmap_state->add_menu_open;
-            } else {
-                touchmap_state->add_menu_open = false;
-            }
-            return toolbar_items[i];
-        }
-    }
-
-    touchmap_state->add_menu_open = false;
-    return SC_TOUCHMAP_OVERLAY_CONTROL_NONE;
+    // Hit control now handled by UI layer - disable old implementation
+    (void) touchmap_state;
+    (void) content_rect;
+    (void) x;
+    (void) y;
+return SC_TOUCHMAP_OVERLAY_CONTROL_NONE;
 }

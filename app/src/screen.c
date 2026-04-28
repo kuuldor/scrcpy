@@ -10,6 +10,7 @@
 #include "options.h"
 #include "ui/ui_context.h"
 #include "ui/ui_demo_layer.h"
+#include "ui/ui_touchmap_layer.h"
 #include "util/env.h"
 #include "util/log.h"
 
@@ -462,6 +463,11 @@ sc_screen_init(struct sc_screen *screen,
         }
     }
 
+    sc_ui_touchmap_layer_init(&screen->ui_touchmap, &screen->im.touchmap);
+    if (!sc_ui_context_add_layer(&screen->ui, &screen->ui_touchmap.layer, 10)) {
+        LOGW("Failed to add UI touchmap layer");
+    }
+
     struct sc_input_manager_params im_params = {
         .controller = params->controller,
         .fp = params->fp,
@@ -832,6 +838,9 @@ sc_screen_handle_ui_event(struct sc_screen *screen, const SDL_Event *event) {
     if (result.request_refresh && screen->video && screen->has_frame) {
         sc_push_event(SC_EVENT_SCREEN_REFRESH);
     }
+
+    sc_input_manager_process_pending_touchmap_control(&screen->im);
+
     return result.consumed;
 }
 

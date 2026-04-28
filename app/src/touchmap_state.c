@@ -2,6 +2,7 @@
 
 #include <SDL2/SDL.h>
 
+#include "touchmap_overlay.h"
 #include "util/log.h"
 
 static struct sc_touchmap_switch_decision
@@ -30,6 +31,7 @@ sc_touchmap_state_init(struct sc_touchmap_state *touchmap,
     touchmap->overlay_enabled = false;
     touchmap->edit_mode = false;
     touchmap->add_menu_open = false;
+    touchmap->pending_control = SC_TOUCHMAP_OVERLAY_CONTROL_NONE;
 
     touchmap->dirty = false;
     touchmap->exit_after_save = false;

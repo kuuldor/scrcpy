@@ -5,6 +5,7 @@
 #include "ui_context.h"
 #include "ui_id.h"
 #include "ui_widget_button.h"
+#include "ui_widget_label.h"
 #include "ui_widget_menu.h"
 #include "ui_widget_separator.h"
 #include "ui_widget_toolbar.h"
@@ -21,7 +22,7 @@
 static SDL_Rect
 sc_ui_demo_layer_get_menu_rect(const struct sc_ui_demo_layer *demo) {
     SDL_Rect anchor = demo->secondary_button.rect;
-    int item_count = 3;
+    int item_count = 4;
     return (SDL_Rect) {
         .x = anchor.x,
         .y = anchor.y + anchor.h + SC_UI_DEMO_MENU_GAP,
@@ -151,9 +152,10 @@ sc_ui_demo_layer_render(struct sc_ui_layer *layer,
     demo->secondary_button.rect = sc_ui_widget_toolbar_get_rect(&demo->toolbar,
                                                                 1);
     demo->menu.panel.rect = sc_ui_demo_layer_get_menu_rect(demo);
-    demo->menu_item_one.rect = sc_ui_widget_menu_get_item_rect(&demo->menu, 0);
-    demo->menu_separator.rect = sc_ui_widget_menu_get_item_rect(&demo->menu, 1);
-    demo->menu_item_two.rect = sc_ui_widget_menu_get_item_rect(&demo->menu, 2);
+    demo->menu_label.rect = sc_ui_widget_menu_get_item_rect(&demo->menu, 0);
+    demo->menu_item_one.rect = sc_ui_widget_menu_get_item_rect(&demo->menu, 1);
+    demo->menu_separator.rect = sc_ui_widget_menu_get_item_rect(&demo->menu, 2);
+    demo->menu_item_two.rect = sc_ui_widget_menu_get_item_rect(&demo->menu, 3);
 
     bool ok = sc_ui_widget_toolbar_render(&demo->toolbar, render_ctx);
 
@@ -213,6 +215,7 @@ sc_ui_demo_layer_render(struct sc_ui_layer *layer,
     ok &= sc_ui_widget_button_render(&demo->secondary_button, render_ctx);
     if (demo->menu_open) {
         ok &= sc_ui_widget_menu_render(&demo->menu, render_ctx);
+        ok &= sc_ui_widget_label_render(&demo->menu_label, render_ctx);
         ok &= sc_ui_widget_button_render(&demo->menu_item_one, render_ctx);
         ok &= sc_ui_widget_separator_render(&demo->menu_separator, render_ctx);
         ok &= sc_ui_widget_button_render(&demo->menu_item_two, render_ctx);
@@ -355,7 +358,7 @@ sc_ui_demo_layer_init(struct sc_ui_demo_layer *demo) {
         .x = 0,
         .y = 0,
         .w = menu_item_width + 2 * SC_UI_DEMO_MENU_PADDING,
-        .h = 3 * menu_item_height + 2 * SC_UI_DEMO_GAP
+        .h = 4 * menu_item_height + 3 * SC_UI_DEMO_GAP
            + 2 * SC_UI_DEMO_MENU_PADDING,
     };
     struct sc_ui_widget_menu_style menu_style = {
@@ -369,6 +372,24 @@ sc_ui_demo_layer_init(struct sc_ui_demo_layer *demo) {
         .item_gap = SC_UI_DEMO_GAP,
     };
     sc_ui_widget_menu_init(&demo->menu, &menu_rect, &menu_style);
+
+    struct sc_ui_widget_label_style label_style = {
+        .text_style = {
+            .color = sc_ui_color_rgba(0xCC, 0xCC, 0xCC, 0xB0),
+            .scale = 2,
+            .tracking = 2,
+        },
+    };
+    int32_t label_width =
+        sc_ui_widget_label_width_for_text("ACTIONS", &label_style);
+    SDL_Rect label_rect = {
+        .x = 0,
+        .y = 0,
+        .w = label_width,
+        .h = sc_ui_widget_label_height_for_style(&label_style),
+    };
+    sc_ui_widget_label_init(&demo->menu_label, &label_rect, "ACTIONS",
+                            &label_style);
 
     sc_ui_widget_button_init(&demo->menu_item_one,
                              sc_ui_id_from_u32(demo, 3), &rect, "FIRST",

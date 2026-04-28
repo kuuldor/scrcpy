@@ -9,6 +9,18 @@
 #include "touchmap_editor.h"
 #include "touchmap_loader.h"
 
+enum sc_touchmap_overlay_control {
+    SC_TOUCHMAP_OVERLAY_CONTROL_NONE,
+    SC_TOUCHMAP_OVERLAY_CONTROL_NEW,
+    SC_TOUCHMAP_OVERLAY_CONTROL_EDIT,
+    SC_TOUCHMAP_OVERLAY_CONTROL_ADD,
+    SC_TOUCHMAP_OVERLAY_CONTROL_DEL,
+    SC_TOUCHMAP_OVERLAY_CONTROL_QUIT,
+    SC_TOUCHMAP_OVERLAY_CONTROL_ADD_BUTTON,
+    SC_TOUCHMAP_OVERLAY_CONTROL_ADD_SKILL,
+    SC_TOUCHMAP_OVERLAY_CONTROL_ADD_WALK,
+};
+
 struct sc_touchmap_state {
     struct sc_gptm_gamepad_touchmap *map;
     char *file;
@@ -19,6 +31,8 @@ struct sc_touchmap_state {
     bool overlay_enabled;
     bool edit_mode;
     bool add_menu_open;
+
+    enum sc_touchmap_overlay_control pending_control;
 
     bool dirty;
     bool exit_after_save;
