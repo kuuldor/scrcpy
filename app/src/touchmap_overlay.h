@@ -20,9 +20,6 @@
 
 #define SC_OVERLAY_DASH_COLOR       0xFFFFFFD0
 #define SC_OVERLAY_SELECTION_COLOR  0xFFD23FFF
-#define SC_OVERLAY_EDIT_BG_COLOR    0x267A3CBB
-#define SC_OVERLAY_EDIT_BG_ACTIVE   0x9A2A2ABB
-#define SC_OVERLAY_EDIT_BORDER      0xFFFFFFB0
 
 /**
  * Render the touchmap overlay on top of the display
@@ -42,10 +39,6 @@ sc_touchmap_overlay_render(SDL_Renderer *renderer,
                            const struct sc_size *frame_size,
                            const SDL_Rect *content_rect,
                            enum sc_orientation orientation);
-
-SDL_Rect
-sc_touchmap_overlay_get_edit_button_rect(const SDL_Rect *content_rect,
-                                         bool edit_mode);
 
 enum sc_touchmap_overlay_control
 sc_touchmap_overlay_hit_control(struct sc_touchmap_state *touchmap_state,

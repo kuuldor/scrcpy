@@ -18,10 +18,20 @@ struct sc_ui_widget_panel {
     struct sc_ui_widget_panel_style style;
 };
 
+struct sc_ui_widget_panel_style
+sc_ui_widget_panel_style_default(void);
+
 void
 sc_ui_widget_panel_init(struct sc_ui_widget_panel *panel,
                         const SDL_Rect *rect,
                         const struct sc_ui_widget_panel_style *style);
+
+void
+sc_ui_widget_panel_init_default(struct sc_ui_widget_panel *panel);
+
+void
+sc_ui_widget_panel_place_top_right(struct sc_ui_widget_panel *panel,
+                                   struct sc_size bounds, int margin);
 
 SDL_Rect
 sc_ui_widget_panel_get_content_rect(const struct sc_ui_widget_panel *panel);

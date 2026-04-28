@@ -23,6 +23,12 @@ struct sc_ui_widget_button_style {
     int padding_v;
 };
 
+enum sc_ui_widget_button_variant {
+    SC_UI_WIDGET_BUTTON_VARIANT_DEFAULT,
+    SC_UI_WIDGET_BUTTON_VARIANT_SUCCESS,
+    SC_UI_WIDGET_BUTTON_VARIANT_DANGER,
+};
+
 struct sc_ui_widget_button {
     struct sc_ui_button_state state;
     SDL_Rect rect;
@@ -31,10 +37,39 @@ struct sc_ui_widget_button {
     struct sc_ui_widget_button_style style;
 };
 
+struct sc_ui_widget_button_style
+sc_ui_widget_button_style_default(void);
+
+struct sc_ui_widget_button_style
+sc_ui_widget_button_style_variant(enum sc_ui_widget_button_variant variant);
+
 void
 sc_ui_widget_button_init(struct sc_ui_widget_button *button, sc_ui_id id,
                          const SDL_Rect *rect, const char *label,
                          const struct sc_ui_widget_button_style *style);
+
+void
+sc_ui_widget_button_init_default(struct sc_ui_widget_button *button,
+                                 sc_ui_id id, const char *label);
+
+void
+sc_ui_widget_button_fit_to_content(struct sc_ui_widget_button *button);
+
+void
+sc_ui_widget_button_apply_variant(struct sc_ui_widget_button *button,
+                                  enum sc_ui_widget_button_variant variant);
+
+int32_t
+sc_ui_widget_button_max_width(const struct sc_ui_widget_button *buttons,
+                              size_t count);
+
+int32_t
+sc_ui_widget_button_max_height(const struct sc_ui_widget_button *buttons,
+                               size_t count);
+
+void
+sc_ui_widget_button_set_size(struct sc_ui_widget_button *button,
+                             int32_t width, int32_t height);
 
 void
 sc_ui_widget_button_reset(struct sc_ui_widget_button *button,

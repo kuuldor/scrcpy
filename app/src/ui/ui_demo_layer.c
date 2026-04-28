@@ -34,9 +34,10 @@ sc_ui_demo_layer_get_menu_rect(const struct sc_ui_demo_layer *demo) {
 static SDL_Rect
 sc_ui_demo_layer_get_toolbar_rect(const struct sc_ui_demo_layer *demo,
                                   const struct sc_ui_geometry *geometry) {
+    (void) geometry;
     return (SDL_Rect) {
-        .x = geometry->content_rect.x + SC_UI_DEMO_MARGIN,
-        .y = geometry->content_rect.y + SC_UI_DEMO_MARGIN,
+        .x = SC_UI_DEMO_MARGIN,
+        .y = SC_UI_DEMO_MARGIN,
         .w = sc_ui_widget_toolbar_total_width(&demo->toolbar, 2),
         .h = demo->toolbar.panel.rect.h,
     };
@@ -45,10 +46,11 @@ sc_ui_demo_layer_get_toolbar_rect(const struct sc_ui_demo_layer *demo,
 static bool
 sc_ui_demo_layer_has_rect(const struct sc_ui_demo_layer *demo,
                           const struct sc_ui_geometry *geometry) {
+    struct sc_size logical_size = sc_ui_geom_get_logical_size(geometry);
     SDL_Rect panel = sc_ui_demo_layer_get_toolbar_rect(demo, geometry);
     return geometry->has_frame
-        && geometry->content_rect.w >= panel.w + 2 * SC_UI_DEMO_MARGIN
-        && geometry->content_rect.h >= panel.h + 2 * SC_UI_DEMO_MARGIN;
+        && logical_size.width >= panel.w + 2 * SC_UI_DEMO_MARGIN
+        && logical_size.height >= panel.h + 2 * SC_UI_DEMO_MARGIN;
 }
 
 static struct sc_ui_input_result

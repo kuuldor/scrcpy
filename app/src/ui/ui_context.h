@@ -13,6 +13,7 @@
 #include "ui_event.h"
 #include "ui_geom.h"
 #include "ui_layer.h"
+#include "ui_metrics.h"
 #include "ui_render.h"
 #include "ui_types.h"
 
@@ -32,6 +33,7 @@ struct sc_ui_context {
     bool needs_refresh;
 
     struct sc_ui_geometry geometry;
+    struct sc_ui_metrics metrics;
 
     sc_ui_id hover_id;
     sc_ui_id active_id;
@@ -55,6 +57,9 @@ sc_ui_context_set_geometry(struct sc_ui_context *ui,
 
 const struct sc_ui_geometry *
 sc_ui_context_get_geometry(const struct sc_ui_context *ui);
+
+const struct sc_ui_metrics *
+sc_ui_context_get_metrics(const struct sc_ui_context *ui);
 
 void
 sc_ui_context_set_enabled(struct sc_ui_context *ui, bool enabled);
@@ -124,6 +129,25 @@ bool
 sc_ui_context_drawable_to_frame_point(const struct sc_ui_context *ui,
                                       struct sc_point drawable,
                                       struct sc_point *out);
+
+bool
+sc_ui_context_drawable_to_logical_point(const struct sc_ui_context *ui,
+                                        struct sc_point drawable,
+                                        struct sc_point *out);
+
+bool
+sc_ui_context_logical_to_drawable_point(const struct sc_ui_context *ui,
+                                        struct sc_point logical,
+                                        struct sc_point *out);
+
+bool
+sc_ui_context_logical_to_drawable_rect(const struct sc_ui_context *ui,
+                                       const SDL_Rect *logical,
+                                       SDL_Rect *out);
+
+int32_t
+sc_ui_context_logical_to_drawable_length(const struct sc_ui_context *ui,
+                                         int32_t value);
 
 bool
 sc_ui_context_frame_to_drawable_point(const struct sc_ui_context *ui,

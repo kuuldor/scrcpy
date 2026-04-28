@@ -19,9 +19,22 @@ struct sc_ui_widget_menu {
     struct sc_ui_widget_menu_style style;
 };
 
+struct sc_ui_widget_menu_style
+sc_ui_widget_menu_style_default(void);
+
 void
 sc_ui_widget_menu_init(struct sc_ui_widget_menu *menu, const SDL_Rect *rect,
                        const struct sc_ui_widget_menu_style *style);
+
+void
+sc_ui_widget_menu_init_default(struct sc_ui_widget_menu *menu);
+
+void
+sc_ui_widget_menu_fit_panel(struct sc_ui_widget_menu *menu, int item_count);
+
+void
+sc_ui_widget_menu_place_below(struct sc_ui_widget_menu *menu,
+                              const SDL_Rect *anchor, int gap);
 
 int32_t
 sc_ui_widget_menu_total_height(const struct sc_ui_widget_menu *menu,

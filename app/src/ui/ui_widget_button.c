@@ -1,5 +1,49 @@
 #include "ui_widget_button.h"
 
+struct sc_ui_widget_button_style
+sc_ui_widget_button_style_default(void) {
+    return (struct sc_ui_widget_button_style) {
+        .fill_color = sc_ui_color_rgba(0x40, 0x40, 0x50, 0xBB),
+        .fill_hover_color = sc_ui_color_rgba(0x50, 0x50, 0x60, 0xBB),
+        .fill_pressed_color = sc_ui_color_rgba(0x30, 0x30, 0x40, 0xBB),
+        .fill_disabled_color = sc_ui_color_rgba(0x30, 0x30, 0x38, 0x90),
+        .border_color = sc_ui_color_rgba(0xFF, 0xFF, 0xFF, 0xB0),
+        .border_pressed_color = sc_ui_color_rgba(0xFF, 0xFF, 0xFF, 0xFF),
+        .border_disabled_color = sc_ui_color_rgba(0x80, 0x80, 0x80, 0x50),
+        .text_style = {
+            .color = sc_ui_color_rgba(0xFF, 0xFF, 0xFF, 0xE0),
+            .scale = 2,
+            .tracking = 2,
+        },
+        .text_disabled_color = sc_ui_color_rgba(0x80, 0x80, 0x80, 0x80),
+        .padding_h = 12,
+        .padding_v = 10,
+    };
+}
+
+struct sc_ui_widget_button_style
+sc_ui_widget_button_style_variant(enum sc_ui_widget_button_variant variant) {
+    struct sc_ui_widget_button_style style = sc_ui_widget_button_style_default();
+    switch (variant) {
+        case SC_UI_WIDGET_BUTTON_VARIANT_SUCCESS:
+            style.fill_color = sc_ui_color_rgba(0x26, 0x7A, 0x3C, 0xBB);
+            style.fill_hover_color = sc_ui_color_rgba(0x36, 0x8A, 0x4C, 0xBB);
+            style.fill_pressed_color = sc_ui_color_rgba(0x16, 0x6A, 0x2C, 0xBB);
+            style.fill_disabled_color = sc_ui_color_rgba(0x1A, 0x1A, 0x20, 0x90);
+            break;
+        case SC_UI_WIDGET_BUTTON_VARIANT_DANGER:
+            style.fill_color = sc_ui_color_rgba(0x9A, 0x2A, 0x2A, 0xBB);
+            style.fill_hover_color = sc_ui_color_rgba(0xAA, 0x3A, 0x3A, 0xBB);
+            style.fill_pressed_color = sc_ui_color_rgba(0x8A, 0x1A, 0x1A, 0xBB);
+            break;
+        case SC_UI_WIDGET_BUTTON_VARIANT_DEFAULT:
+        default:
+            break;
+    }
+
+    return style;
+}
+
 SDL_Rect
 sc_ui_widget_button_get_content_rect(const struct sc_ui_widget_button *button) {
     return (SDL_Rect) {
@@ -35,6 +79,63 @@ sc_ui_widget_button_init(struct sc_ui_widget_button *button, sc_ui_id id,
     button->label = label;
     button->enabled = true;
     button->style = *style;
+}
+
+void
+sc_ui_widget_button_init_default(struct sc_ui_widget_button *button,
+                                 sc_ui_id id, const char *label) {
+    SDL_Rect rect = {0, 0, 0, 0};
+    struct sc_ui_widget_button_style style = sc_ui_widget_button_style_default();
+    sc_ui_widget_button_init(button, id, &rect, label, &style);
+}
+
+void
+sc_ui_widget_button_fit_to_content(struct sc_ui_widget_button *button) {
+    button->rect.w = sc_ui_widget_button_width_for_label(button->label,
+                                                         &button->style);
+    button->rect.h = sc_ui_widget_button_height_for_style(&button->style);
+}
+
+void
+sc_ui_widget_button_apply_variant(struct sc_ui_widget_button *button,
+                                  enum sc_ui_widget_button_variant variant) {
+    button->style = sc_ui_widget_button_style_variant(variant);
+}
+
+int32_t
+sc_ui_widget_button_max_width(const struct sc_ui_widget_button *buttons,
+                              size_t count) {
+    int32_t width = 0;
+    for (size_t i = 0; i < count; ++i) {
+        int32_t item_width = sc_ui_widget_button_width_for_label(buttons[i].label,
+                                                                 &buttons[i].style);
+        if (item_width > width) {
+            width = item_width;
+        }
+    }
+
+    return width;
+}
+
+int32_t
+sc_ui_widget_button_max_height(const struct sc_ui_widget_button *buttons,
+                               size_t count) {
+    int32_t height = 0;
+    for (size_t i = 0; i < count; ++i) {
+        int32_t item_height = sc_ui_widget_button_height_for_style(&buttons[i].style);
+        if (item_height > height) {
+            height = item_height;
+        }
+    }
+
+    return height;
+}
+
+void
+sc_ui_widget_button_set_size(struct sc_ui_widget_button *button,
+                             int32_t width, int32_t height) {
+    button->rect.w = width;
+    button->rect.h = height;
 }
 
 void

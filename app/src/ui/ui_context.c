@@ -41,6 +41,7 @@ sc_ui_context_init(struct sc_ui_context *ui,
         .orientation = SC_ORIENTATION_0,
         .has_frame = false,
     };
+    ui->metrics = sc_ui_metrics_make(&ui->geometry);
     ui->hover_id = SC_UI_ID_INVALID;
     ui->active_id = SC_UI_ID_INVALID;
     ui->focus_id = SC_UI_ID_INVALID;
@@ -60,11 +61,17 @@ void
 sc_ui_context_set_geometry(struct sc_ui_context *ui,
                            const struct sc_ui_geometry *geometry) {
     ui->geometry = *geometry;
+    ui->metrics = sc_ui_metrics_make(geometry);
 }
 
 const struct sc_ui_geometry *
 sc_ui_context_get_geometry(const struct sc_ui_context *ui) {
     return &ui->geometry;
+}
+
+const struct sc_ui_metrics *
+sc_ui_context_get_metrics(const struct sc_ui_context *ui) {
+    return &ui->metrics;
 }
 
 void
@@ -155,6 +162,32 @@ sc_ui_context_handle_event(struct sc_ui_context *ui,
         return result;
     }
 
+    struct sc_ui_event transformed_event = *event;
+    if (event->type == SC_UI_EVENT_POINTER_MOVE
+            || event->type == SC_UI_EVENT_POINTER_DOWN
+            || event->type == SC_UI_EVENT_POINTER_UP) {
+        struct sc_point logical;
+        if (sc_ui_context_drawable_to_logical_point(ui,
+                (struct sc_point) {
+                    .x = event->data.pointer.x,
+                    .y = event->data.pointer.y,
+                }, &logical)) {
+            transformed_event.data.pointer.x = logical.x;
+            transformed_event.data.pointer.y = logical.y;
+        }
+    }
+
+    for (size_t i = 0; i < ui->layer_count; ++i) {
+        struct sc_ui_layer *layer = ui->layers[i].layer;
+        if (!layer || !layer->visible || !layer->enabled || !layer->ops) {
+            continue;
+        }
+
+        if (layer->ops->sync) {
+            layer->ops->sync(layer, ui);
+        }
+    }
+
     for (size_t i = ui->layer_count; i > 0; --i) {
         struct sc_ui_layer *layer = ui->layers[i - 1].layer;
         if (!layer || !layer->visible || !layer->enabled
@@ -163,7 +196,7 @@ sc_ui_context_handle_event(struct sc_ui_context *ui,
         }
 
         struct sc_ui_input_result layer_result =
-            layer->ops->handle_event(layer, ui, event);
+            layer->ops->handle_event(layer, ui, &transformed_event);
         result.request_refresh |= layer_result.request_refresh;
         if (layer_result.consumed) {
             result.consumed = true;
@@ -188,6 +221,7 @@ sc_ui_context_render(struct sc_ui_context *ui, SDL_Renderer *renderer) {
         .renderer = renderer,
         .ui = ui,
         .geometry = &ui->geometry,
+        .metrics = &ui->metrics,
     };
 
     for (size_t i = 0; i < ui->layer_count; ++i) {
@@ -329,6 +363,87 @@ sc_ui_context_drawable_to_frame_point(const struct sc_ui_context *ui,
     }
 
     return true;
+}
+
+bool
+sc_ui_context_drawable_to_logical_point(const struct sc_ui_context *ui,
+                                        struct sc_point drawable,
+                                        struct sc_point *out) {
+    const struct sc_ui_geometry *g = &ui->geometry;
+    struct sc_size logical_size = sc_ui_geom_get_logical_size(g);
+    if (!g->has_frame || !g->content_rect.w || !g->content_rect.h
+            || !logical_size.width || !logical_size.height) {
+        return false;
+    }
+
+    out->x = (int64_t) (drawable.x - g->content_rect.x)
+           * logical_size.width / g->content_rect.w;
+    out->y = (int64_t) (drawable.y - g->content_rect.y)
+           * logical_size.height / g->content_rect.h;
+    return true;
+}
+
+bool
+sc_ui_context_logical_to_drawable_point(const struct sc_ui_context *ui,
+                                        struct sc_point logical,
+                                        struct sc_point *out) {
+    const struct sc_ui_geometry *g = &ui->geometry;
+    struct sc_size logical_size = sc_ui_geom_get_logical_size(g);
+    if (!g->has_frame || !g->content_rect.w || !g->content_rect.h
+            || !logical_size.width || !logical_size.height) {
+        return false;
+    }
+
+    out->x = g->content_rect.x + (int64_t) logical.x * g->content_rect.w
+                              / logical_size.width;
+    out->y = g->content_rect.y + (int64_t) logical.y * g->content_rect.h
+                              / logical_size.height;
+    return true;
+}
+
+bool
+sc_ui_context_logical_to_drawable_rect(const struct sc_ui_context *ui,
+                                       const SDL_Rect *logical,
+                                       SDL_Rect *out) {
+    struct sc_point origin;
+    struct sc_point corner;
+    if (!sc_ui_context_logical_to_drawable_point(ui,
+            (struct sc_point) {.x = logical->x, .y = logical->y}, &origin)
+            || !sc_ui_context_logical_to_drawable_point(ui,
+            (struct sc_point) {
+                .x = logical->x + logical->w,
+                .y = logical->y + logical->h,
+            }, &corner)) {
+        return false;
+    }
+
+    out->x = origin.x;
+    out->y = origin.y;
+    out->w = corner.x - origin.x;
+    out->h = corner.y - origin.y;
+    if (out->w <= 0) {
+        out->w = 1;
+    }
+    if (out->h <= 0) {
+        out->h = 1;
+    }
+    return true;
+}
+
+int32_t
+sc_ui_context_logical_to_drawable_length(const struct sc_ui_context *ui,
+                                         int32_t value) {
+    const struct sc_ui_geometry *g = &ui->geometry;
+    struct sc_size logical_size = sc_ui_geom_get_logical_size(g);
+    if (!g->has_frame || !logical_size.width || !logical_size.height
+            || !g->content_rect.w || !g->content_rect.h) {
+        return value > 0 ? value : 1;
+    }
+
+    int32_t sx = (int64_t) value * g->content_rect.w / logical_size.width;
+    int32_t sy = (int64_t) value * g->content_rect.h / logical_size.height;
+    int32_t scaled = sx < sy ? sx : sy;
+    return scaled > 0 ? scaled : 1;
 }
 
 bool

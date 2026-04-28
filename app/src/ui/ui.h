@@ -9,6 +9,7 @@
 #include "ui_id.h"
 #include "ui_layer.h"
 #include "ui_layout.h"
+#include "ui_metrics.h"
 #include "ui_render.h"
 #include "ui_text.h"
 #include "ui_types.h"

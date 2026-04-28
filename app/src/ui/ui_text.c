@@ -4,6 +4,8 @@
 
 #include <SDL2/SDL.h>
 
+#include "ui_context.h"
+
 #define SC_UI_TEXT_GLYPH_WIDTH 5
 #define SC_UI_TEXT_GLYPH_HEIGHT 7
 
@@ -148,18 +150,36 @@ sc_ui_text_draw(const struct sc_ui_render_ctx *render_ctx,
     }
 
     SDL_Renderer *renderer = render_ctx->renderer;
-    int pixel = sc_ui_text_pixel_size(style);
-    int tracking = style->tracking;
+    struct sc_ui_text_style drawable_style = *style;
+    struct sc_point drawable_origin = {.x = x, .y = y};
+    if (render_ctx->ui) {
+        sc_ui_context_logical_to_drawable_point(render_ctx->ui,
+                                                (struct sc_point) {.x = x, .y = y},
+                                                &drawable_origin);
+        drawable_style.scale = sc_ui_context_logical_to_drawable_length(
+            render_ctx->ui, style->scale > 0 ? style->scale : 1);
+        drawable_style.tracking = sc_ui_context_logical_to_drawable_length(
+            render_ctx->ui, style->tracking);
+        if (!style->tracking) {
+            drawable_style.tracking = 0;
+        }
+    }
+
+    int pixel = sc_ui_text_pixel_size(&drawable_style);
+    int tracking = drawable_style.tracking;
 
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    if (SDL_SetRenderDrawColor(renderer, style->color.r, style->color.g,
-                               style->color.b, style->color.a)) {
+    if (SDL_SetRenderDrawColor(renderer, drawable_style.color.r,
+                               drawable_style.color.g,
+                               drawable_style.color.b,
+                               drawable_style.color.a)) {
         return false;
     }
 
     size_t len = SDL_strlen(text);
     for (size_t i = 0; i < len; ++i) {
-        int glyph_x = x + (int) i * (SC_UI_TEXT_GLYPH_WIDTH * pixel + tracking);
+        int glyph_x = drawable_origin.x
+                    + (int) i * (SC_UI_TEXT_GLYPH_WIDTH * pixel + tracking);
         for (int row = 0; row < SC_UI_TEXT_GLYPH_HEIGHT; ++row) {
             uint8_t bits = sc_ui_text_glyph_row(text[i], row);
             for (int col = 0; col < SC_UI_TEXT_GLYPH_WIDTH; ++col) {
@@ -169,7 +189,7 @@ sc_ui_text_draw(const struct sc_ui_render_ctx *render_ctx,
 
                 SDL_Rect rect = {
                     .x = glyph_x + col * pixel,
-                    .y = y + row * pixel,
+                    .y = drawable_origin.y + row * pixel,
                     .w = pixel,
                     .h = pixel,
                 };
@@ -188,22 +208,76 @@ sc_ui_text_draw_in_rect(const struct sc_ui_render_ctx *render_ctx,
                         const SDL_Rect *rect, const char *text,
                         const struct sc_ui_text_style *style,
                         enum sc_ui_text_align align) {
-    struct sc_ui_text_metrics metrics = sc_ui_text_measure(text, style);
-    int x = rect->x;
+    SDL_Rect drawable_rect = *rect;
+    struct sc_ui_text_style drawable_style = *style;
+    if (render_ctx->ui) {
+        sc_ui_context_logical_to_drawable_rect(render_ctx->ui, rect,
+                                               &drawable_rect);
+        drawable_style.scale = sc_ui_context_logical_to_drawable_length(
+            render_ctx->ui, style->scale > 0 ? style->scale : 1);
+        drawable_style.tracking = sc_ui_context_logical_to_drawable_length(
+            render_ctx->ui, style->tracking);
+        if (!style->tracking) {
+            drawable_style.tracking = 0;
+        }
+    }
+
+    struct sc_ui_text_metrics metrics = sc_ui_text_measure(text, &drawable_style);
+    int x = drawable_rect.x;
     switch (align) {
         case SC_UI_TEXT_ALIGN_LEFT:
             break;
         case SC_UI_TEXT_ALIGN_CENTER:
-            x += (rect->w - metrics.width) / 2;
+            x += (drawable_rect.w - metrics.width) / 2;
             break;
         case SC_UI_TEXT_ALIGN_RIGHT:
-            x += rect->w - metrics.width;
+            x += drawable_rect.w - metrics.width;
             break;
         default:
             assert(false);
             break;
     }
 
-    int y = rect->y + (rect->h - metrics.height) / 2;
-    return sc_ui_text_draw(render_ctx, x, y, text, style);
+    int y = drawable_rect.y + (drawable_rect.h - metrics.height) / 2;
+
+    if (!text || !*text) {
+        return true;
+    }
+
+    SDL_Renderer *renderer = render_ctx->renderer;
+    int pixel = sc_ui_text_pixel_size(&drawable_style);
+    int tracking = drawable_style.tracking;
+
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    if (SDL_SetRenderDrawColor(renderer, drawable_style.color.r,
+                               drawable_style.color.g,
+                               drawable_style.color.b,
+                               drawable_style.color.a)) {
+        return false;
+    }
+
+    size_t len = SDL_strlen(text);
+    for (size_t i = 0; i < len; ++i) {
+        int glyph_x = x + (int) i * (SC_UI_TEXT_GLYPH_WIDTH * pixel + tracking);
+        for (int row = 0; row < SC_UI_TEXT_GLYPH_HEIGHT; ++row) {
+            uint8_t bits = sc_ui_text_glyph_row(text[i], row);
+            for (int col = 0; col < SC_UI_TEXT_GLYPH_WIDTH; ++col) {
+                if (!(bits & (1u << (SC_UI_TEXT_GLYPH_WIDTH - 1 - col)))) {
+                    continue;
+                }
+
+                SDL_Rect pixel_rect = {
+                    .x = glyph_x + col * pixel,
+                    .y = y + row * pixel,
+                    .w = pixel,
+                    .h = pixel,
+                };
+                if (SDL_RenderFillRect(renderer, &pixel_rect)) {
+                    return false;
+                }
+            }
+        }
+    }
+
+    return true;
 }

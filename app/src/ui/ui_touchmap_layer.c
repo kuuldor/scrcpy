@@ -14,6 +14,91 @@
 #define SC_UI_TOUCHMAP_TOOLBAR_GAP 6
 #define SC_UI_TOUCHMAP_MENU_GAP 6
 
+static void
+sc_ui_touchmap_layer_sync_layout(struct sc_ui_touchmap_layer *tm,
+                                 const struct sc_ui_geometry *geometry) {
+    const struct sc_touchmap_state *state = tm->touchmap_state;
+    struct sc_size logical_size = sc_ui_geom_get_logical_size(geometry);
+
+    const char *edit_label = !state->map ? "NEW"
+                            : state->edit_mode ? "QUIT"
+                            : "EDIT";
+    tm->edit_button.label = edit_label;
+    sc_ui_widget_button_apply_variant(&tm->edit_button,
+                                      SC_UI_WIDGET_BUTTON_VARIANT_SUCCESS);
+    sc_ui_widget_button_fit_to_content(&tm->edit_button);
+    tm->edit_button.rect.x = logical_size.width - tm->edit_button.rect.w
+                           - SC_UI_TOUCHMAP_EDIT_MARGIN;
+    tm->edit_button.rect.y = SC_UI_TOUCHMAP_EDIT_MARGIN;
+
+    sc_ui_widget_button_apply_variant(&tm->toolbar_buttons[0],
+                                      SC_UI_WIDGET_BUTTON_VARIANT_DEFAULT);
+    sc_ui_widget_button_apply_variant(&tm->toolbar_buttons[1],
+                                      SC_UI_WIDGET_BUTTON_VARIANT_DEFAULT);
+    sc_ui_widget_button_apply_variant(&tm->toolbar_buttons[2],
+                                      SC_UI_WIDGET_BUTTON_VARIANT_DANGER);
+    sc_ui_widget_button_apply_variant(&tm->add_menu_items[0],
+                                      SC_UI_WIDGET_BUTTON_VARIANT_DEFAULT);
+    sc_ui_widget_button_apply_variant(&tm->add_menu_items[1],
+                                      SC_UI_WIDGET_BUTTON_VARIANT_DEFAULT);
+    sc_ui_widget_button_apply_variant(&tm->add_menu_items[2],
+                                      SC_UI_WIDGET_BUTTON_VARIANT_DEFAULT);
+
+    struct sc_ui_widget_button *sized_buttons[] = {
+        &tm->toolbar_buttons[0],
+        &tm->toolbar_buttons[1],
+        &tm->toolbar_buttons[2],
+        &tm->add_menu_items[0],
+        &tm->add_menu_items[1],
+        &tm->add_menu_items[2],
+    };
+    int32_t button_width = 0;
+    int32_t button_height = 0;
+    for (size_t i = 0; i < ARRAY_LEN(sized_buttons); ++i) {
+        sc_ui_widget_button_fit_to_content(sized_buttons[i]);
+        if (sized_buttons[i]->rect.w > button_width) {
+            button_width = sized_buttons[i]->rect.w;
+        }
+        if (sized_buttons[i]->rect.h > button_height) {
+            button_height = sized_buttons[i]->rect.h;
+        }
+    }
+
+    tm->toolbar_panel.style.padding = SC_UI_TOUCHMAP_TOOLBAR_PADDING;
+    tm->toolbar_panel.rect.w = 3 * button_width + 2 * SC_UI_TOUCHMAP_TOOLBAR_GAP
+                             + 2 * SC_UI_TOUCHMAP_TOOLBAR_PADDING;
+    tm->toolbar_panel.rect.h = button_height + 2 * SC_UI_TOUCHMAP_TOOLBAR_PADDING;
+    sc_ui_widget_panel_place_top_right(&tm->toolbar_panel, logical_size,
+                                       SC_UI_TOUCHMAP_EDIT_MARGIN);
+
+    for (int i = 0; i < 3; ++i) {
+        sc_ui_widget_button_set_size(&tm->toolbar_buttons[i], button_width,
+                                     button_height);
+        tm->toolbar_buttons[i].rect.x = tm->toolbar_panel.rect.x
+            + SC_UI_TOUCHMAP_TOOLBAR_PADDING
+            + i * (button_width + SC_UI_TOUCHMAP_TOOLBAR_GAP);
+        tm->toolbar_buttons[i].rect.y = tm->toolbar_panel.rect.y
+                                      + SC_UI_TOUCHMAP_TOOLBAR_PADDING;
+    }
+
+    tm->add_menu.panel.style.padding = SC_UI_TOUCHMAP_TOOLBAR_PADDING;
+    tm->add_menu.style.panel.padding = SC_UI_TOUCHMAP_TOOLBAR_PADDING;
+    tm->add_menu.style.item_width = button_width;
+    tm->add_menu.style.item_height = button_height;
+    tm->add_menu.style.item_gap = SC_UI_TOUCHMAP_MENU_GAP;
+    sc_ui_widget_menu_fit_panel(&tm->add_menu, 3);
+    sc_ui_widget_menu_place_below(&tm->add_menu, &tm->toolbar_panel.rect,
+                                  SC_UI_TOUCHMAP_MENU_GAP);
+
+    for (size_t i = 0; i < 3; ++i) {
+        sc_ui_widget_button_set_size(&tm->add_menu_items[i], button_width,
+                                     button_height);
+        tm->add_menu_items[i].rect = sc_ui_widget_menu_get_item_rect(&tm->add_menu,
+                                                                     i);
+    }
+    tm->add_menu_items[2].enabled = !(state->map && state->map->has_walk);
+}
+
 static bool
 sc_ui_touchmap_layer_is_visible(const struct sc_ui_touchmap_layer *layer) {
     return layer->touchmap_state
@@ -22,73 +107,14 @@ sc_ui_touchmap_layer_is_visible(const struct sc_ui_touchmap_layer *layer) {
 }
 
 static void
-sc_ui_touchmap_layer_get_edit_button_text(const struct sc_touchmap_state *state,
-                                          char *buf, size_t bufsize) {
-    if (!state->map) {
-        snprintf(buf, bufsize, "NEW");
-    } else if (state->edit_mode) {
-        snprintf(buf, bufsize, "QUIT");
-    } else {
-        snprintf(buf, bufsize, "EDIT");
+sc_ui_touchmap_layer_sync(struct sc_ui_layer *layer, struct sc_ui_context *ui) {
+    struct sc_ui_touchmap_layer *tm = layer->userdata;
+    const struct sc_ui_geometry *geometry = sc_ui_context_get_geometry(ui);
+    if (!sc_ui_touchmap_layer_is_visible(tm)) {
+        return;
     }
-}
 
-static SDL_Rect
-sc_ui_touchmap_layer_get_edit_button_rect(
-    const struct sc_ui_touchmap_layer *layer,
-    const struct sc_ui_geometry *geometry) {
-    return (SDL_Rect) {
-        .x = geometry->content_rect.x + geometry->content_rect.w
-           - layer->edit_button.rect.w - SC_UI_TOUCHMAP_EDIT_MARGIN,
-        .y = geometry->content_rect.y + SC_UI_TOUCHMAP_EDIT_MARGIN,
-        .w = layer->edit_button.rect.w,
-        .h = layer->edit_button.rect.h,
-    };
-}
-
-static SDL_Rect
-sc_ui_touchmap_layer_get_toolbar_rect(
-    const struct sc_ui_touchmap_layer *layer,
-    const struct sc_ui_geometry *geometry) {
-    return (SDL_Rect) {
-        .x = geometry->content_rect.x + geometry->content_rect.w
-           - layer->toolbar_panel.rect.w - SC_UI_TOUCHMAP_EDIT_MARGIN,
-        .y = geometry->content_rect.y + SC_UI_TOUCHMAP_EDIT_MARGIN,
-        .w = layer->toolbar_panel.rect.w,
-        .h = layer->toolbar_panel.rect.h,
-    };
-}
-
-static SDL_Rect
-sc_ui_touchmap_layer_get_menu_rect(
-    const struct sc_ui_touchmap_layer *layer,
-    const struct sc_ui_geometry *geometry) {
-    SDL_Rect toolbar_rect = sc_ui_touchmap_layer_get_toolbar_rect(layer,
-                                                                    geometry);
-    return (SDL_Rect) {
-        .x = toolbar_rect.x,
-        .y = toolbar_rect.y + toolbar_rect.h + SC_UI_TOUCHMAP_MENU_GAP,
-        .w = layer->add_menu.panel.rect.w,
-        .h = layer->add_menu.panel.rect.h,
-    };
-}
-
-static void
-sc_ui_touchmap_layer_update_toolbar_button_positions(
-    struct sc_ui_touchmap_layer *tm,
-    const struct sc_ui_geometry *geometry) {
-    SDL_Rect toolbar_rect = sc_ui_touchmap_layer_get_toolbar_rect(tm,
-                                                                    geometry);
-    tm->toolbar_panel.rect = toolbar_rect;
-
-    int32_t content_x = toolbar_rect.x + SC_UI_TOUCHMAP_TOOLBAR_PADDING;
-    int32_t content_y = toolbar_rect.y + SC_UI_TOUCHMAP_TOOLBAR_PADDING;
-
-    for (int i = 0; i < 3; ++i) {
-        tm->toolbar_buttons[i].rect.x = content_x
-            + i * (tm->toolbar_buttons[i].rect.w + SC_UI_TOUCHMAP_TOOLBAR_GAP);
-        tm->toolbar_buttons[i].rect.y = content_y;
-    }
+    sc_ui_touchmap_layer_sync_layout(tm, geometry);
 }
 
 static struct sc_ui_input_result
@@ -97,7 +123,6 @@ sc_ui_touchmap_layer_handle_event(struct sc_ui_layer *layer,
                                   const struct sc_ui_event *event) {
     struct sc_ui_touchmap_layer *tm = layer->userdata;
     const struct sc_touchmap_state *state = tm->touchmap_state;
-    const struct sc_ui_geometry *geometry = sc_ui_context_get_geometry(ui);
 
     struct sc_ui_input_result result = {false, false};
 
@@ -106,8 +131,6 @@ sc_ui_touchmap_layer_handle_event(struct sc_ui_layer *layer,
     }
 
     if (state->edit_mode) {
-        sc_ui_touchmap_layer_update_toolbar_button_positions(tm, geometry);
-
         for (int i = 0; i < 3; ++i) {
             struct sc_ui_button_result btn_result =
                 sc_ui_widget_button_handle_event(&tm->toolbar_buttons[i],
@@ -135,10 +158,6 @@ sc_ui_touchmap_layer_handle_event(struct sc_ui_layer *layer,
         }
 
         if (!result.consumed && tm->touchmap_state->add_menu_open) {
-            SDL_Rect menu_rect =
-                sc_ui_touchmap_layer_get_menu_rect(tm, geometry);
-            tm->add_menu.panel.rect = menu_rect;
-
             for (size_t i = 0; i < 3; ++i) {
                 tm->add_menu_items[i].rect =
                     sc_ui_widget_menu_get_item_rect(&tm->add_menu, i);
@@ -189,10 +208,6 @@ sc_ui_touchmap_layer_handle_event(struct sc_ui_layer *layer,
             }
         }
     } else {
-        SDL_Rect edit_rect =
-            sc_ui_touchmap_layer_get_edit_button_rect(tm, geometry);
-        tm->edit_button.rect = edit_rect;
-
         struct sc_ui_button_result edit_result =
             sc_ui_widget_button_handle_event(&tm->edit_button, ui, layer,
                                              event);
@@ -217,7 +232,6 @@ sc_ui_touchmap_layer_render(struct sc_ui_layer *layer,
                             const struct sc_ui_render_ctx *render_ctx) {
     struct sc_ui_touchmap_layer *tm = layer->userdata;
     const struct sc_touchmap_state *state = tm->touchmap_state;
-    const struct sc_ui_geometry *geometry = render_ctx->geometry;
 
     if (!sc_ui_touchmap_layer_is_visible(tm)) {
         return true;
@@ -225,42 +239,8 @@ sc_ui_touchmap_layer_render(struct sc_ui_layer *layer,
 
     bool ok = true;
 
-    char edit_text[16];
-    sc_ui_touchmap_layer_get_edit_button_text(state, edit_text,
-                                               sizeof(edit_text));
-
-    struct sc_ui_widget_button_style edit_style = {
-        .fill_color = sc_ui_color_rgba(0x26, 0x7A, 0x3C, 0xBB),
-        .fill_hover_color = sc_ui_color_rgba(0x36, 0x8A, 0x4C, 0xBB),
-        .fill_pressed_color = sc_ui_color_rgba(0x16, 0x6A, 0x2C, 0xBB),
-        .fill_disabled_color = sc_ui_color_rgba(0x1A, 0x1A, 0x20, 0x90),
-        .border_color = sc_ui_color_rgba(0xFF, 0xFF, 0xFF, 0xB0),
-        .border_pressed_color = sc_ui_color_rgba(0xFF, 0xFF, 0xFF, 0xFF),
-        .border_disabled_color = sc_ui_color_rgba(0x80, 0x80, 0x80, 0x50),
-        .text_style = {
-            .color = sc_ui_color_rgba(0xFF, 0xFF, 0xFF, 0xE0),
-            .scale = 3,
-            .tracking = 3,
-        },
-        .text_disabled_color = sc_ui_color_rgba(0x80, 0x80, 0x80, 0x80),
-        .padding_h = 12,
-        .padding_v = 10,
-    };
-    tm->edit_button.style = edit_style;
-    tm->edit_button.label = edit_text;
-
     if (state->edit_mode) {
-        SDL_Rect toolbar_rect =
-            sc_ui_touchmap_layer_get_toolbar_rect(tm, geometry);
-        tm->toolbar_panel.rect = toolbar_rect;
         ok &= sc_ui_widget_panel_render(&tm->toolbar_panel, render_ctx);
-
-        tm->toolbar_buttons[2].style.fill_color =
-            sc_ui_color_rgba(0x9A, 0x2A, 0x2A, 0xBB);
-        tm->toolbar_buttons[2].style.fill_hover_color =
-            sc_ui_color_rgba(0xAA, 0x3A, 0x3A, 0xBB);
-        tm->toolbar_buttons[2].style.fill_pressed_color =
-            sc_ui_color_rgba(0x8A, 0x1A, 0x1A, 0xBB);
 
         for (int i = 0; i < 3; ++i) {
             ok &= sc_ui_widget_button_render(&tm->toolbar_buttons[i],
@@ -268,10 +248,6 @@ sc_ui_touchmap_layer_render(struct sc_ui_layer *layer,
         }
 
         if (state->add_menu_open) {
-            SDL_Rect menu_rect =
-                sc_ui_touchmap_layer_get_menu_rect(tm, geometry);
-            tm->add_menu.panel.rect = menu_rect;
-
             ok &= sc_ui_widget_menu_render(&tm->add_menu, render_ctx);
 
             for (size_t i = 0; i < 3; ++i) {
@@ -282,9 +258,6 @@ sc_ui_touchmap_layer_render(struct sc_ui_layer *layer,
             }
         }
     } else {
-        SDL_Rect edit_rect =
-            sc_ui_touchmap_layer_get_edit_button_rect(tm, geometry);
-        tm->edit_button.rect = edit_rect;
         ok &= sc_ui_widget_button_render(&tm->edit_button, render_ctx);
     }
 
@@ -295,7 +268,7 @@ void
 sc_ui_touchmap_layer_init(struct sc_ui_touchmap_layer *layer,
                           struct sc_touchmap_state *touchmap_state) {
     static const struct sc_ui_layer_ops ops = {
-        .sync = NULL,
+        .sync = sc_ui_touchmap_layer_sync,
         .handle_event = sc_ui_touchmap_layer_handle_event,
         .render = sc_ui_touchmap_layer_render,
         .on_detach = NULL,
@@ -310,97 +283,27 @@ sc_ui_touchmap_layer_init(struct sc_ui_touchmap_layer *layer,
         .userdata = layer,
     };
 
-    struct sc_ui_widget_button_style button_style = {
-        .fill_color = sc_ui_color_rgba(0x40, 0x40, 0x50, 0xBB),
-        .fill_hover_color = sc_ui_color_rgba(0x50, 0x50, 0x60, 0xBB),
-        .fill_pressed_color = sc_ui_color_rgba(0x30, 0x30, 0x40, 0xBB),
-        .fill_disabled_color = sc_ui_color_rgba(0x30, 0x30, 0x38, 0x90),
-        .border_color = sc_ui_color_rgba(0xFF, 0xFF, 0xFF, 0xB0),
-        .border_pressed_color = sc_ui_color_rgba(0xFF, 0xFF, 0xFF, 0xFF),
-        .border_disabled_color = sc_ui_color_rgba(0x80, 0x80, 0x80, 0x50),
-        .text_style = {
-            .color = sc_ui_color_rgba(0xFF, 0xFF, 0xFF, 0xE0),
-            .scale = 3,
-            .tracking = 3,
-        },
-        .text_disabled_color = sc_ui_color_rgba(0x80, 0x80, 0x80, 0x80),
-        .padding_h = 12,
-        .padding_v = 10,
-    };
+    sc_ui_widget_panel_init_default(&layer->toolbar_panel);
+    layer->toolbar_panel.style.padding = 0;
 
-    int32_t button_width =
-        sc_ui_widget_button_width_for_label("QUIT", &button_style);
-    int32_t button_height =
-        sc_ui_widget_button_height_for_style(&button_style);
+    sc_ui_widget_button_init_default(&layer->edit_button,
+                                     sc_ui_id_from_u32(layer, 0), "EDIT");
 
-    int32_t menu_button_width =
-        sc_ui_widget_button_width_for_label("BUTTON", &button_style);
-    if (menu_button_width > button_width) {
-        button_width = menu_button_width;
-    }
+    sc_ui_widget_button_init_default(&layer->toolbar_buttons[0],
+                                     sc_ui_id_from_u32(layer, 1), "ADD");
+    sc_ui_widget_button_init_default(&layer->toolbar_buttons[1],
+                                     sc_ui_id_from_u32(layer, 2), "DEL");
+    sc_ui_widget_button_init_default(&layer->toolbar_buttons[2],
+                                     sc_ui_id_from_u32(layer, 3), "QUIT");
 
-    SDL_Rect toolbar_rect = {
-        .x = 0,
-        .y = 0,
-        .w = 3 * button_width + 2 * SC_UI_TOUCHMAP_TOOLBAR_GAP
-           + 2 * SC_UI_TOUCHMAP_TOOLBAR_PADDING,
-        .h = button_height + 2 * SC_UI_TOUCHMAP_TOOLBAR_PADDING,
-    };
-    struct sc_ui_widget_panel_style toolbar_panel_style = {
-        .fill_color = sc_ui_color_rgba(0x10, 0x10, 0x16, 0xD8),
-        .border_color = sc_ui_color_rgba(0xFF, 0xFF, 0xFF, 0x70),
-        .padding = SC_UI_TOUCHMAP_TOOLBAR_PADDING,
-    };
-    sc_ui_widget_panel_init(&layer->toolbar_panel, &toolbar_rect,
-                            &toolbar_panel_style);
+    sc_ui_widget_menu_init_default(&layer->add_menu);
+    layer->add_menu.style.panel.padding = 0;
+    layer->add_menu.style.item_gap = 0;
 
-    SDL_Rect button_rect = {
-        .x = 0,
-        .y = 0,
-        .w = button_width,
-        .h = button_height,
-    };
-    sc_ui_widget_button_init(&layer->edit_button,
-                             sc_ui_id_from_u32(layer, 0), &button_rect,
-                             "EDIT", &button_style);
-
-    sc_ui_widget_button_init(&layer->toolbar_buttons[0],
-                             sc_ui_id_from_u32(layer, 1), &button_rect,
-                             "ADD", &button_style);
-    sc_ui_widget_button_init(&layer->toolbar_buttons[1],
-                             sc_ui_id_from_u32(layer, 2), &button_rect,
-                             "DEL", &button_style);
-    sc_ui_widget_button_init(&layer->toolbar_buttons[2],
-                             sc_ui_id_from_u32(layer, 3), &button_rect,
-                             "QUIT", &button_style);
-
-    SDL_Rect menu_panel_rect = {
-        .x = 0,
-        .y = 0,
-        .w = button_width + 2 * SC_UI_TOUCHMAP_TOOLBAR_PADDING,
-        .h = 3 * button_height + 2 * SC_UI_TOUCHMAP_MENU_GAP
-           + 2 * SC_UI_TOUCHMAP_TOOLBAR_PADDING,
-    };
-    struct sc_ui_widget_menu_style menu_style = {
-        .panel = {
-            .fill_color = sc_ui_color_rgba(0x10, 0x10, 0x16, 0xD8),
-            .border_color = sc_ui_color_rgba(0xFF, 0xFF, 0xFF, 0x70),
-            .padding = SC_UI_TOUCHMAP_TOOLBAR_PADDING,
-        },
-        .item_width = button_width,
-        .item_height = button_height,
-        .item_gap = SC_UI_TOUCHMAP_MENU_GAP,
-    };
-    sc_ui_widget_menu_init(&layer->add_menu, &menu_panel_rect, &menu_style);
-
-    sc_ui_widget_button_init(&layer->add_menu_items[0],
-                             sc_ui_id_from_u32(layer, 4), &button_rect,
-                             "BUTTON", &button_style);
-    sc_ui_widget_button_init(&layer->add_menu_items[1],
-                             sc_ui_id_from_u32(layer, 5), &button_rect,
-                             "SKILL", &button_style);
-    sc_ui_widget_button_init(&layer->add_menu_items[2],
-                             sc_ui_id_from_u32(layer, 6), &button_rect,
-                             "WALK", &button_style);
-    layer->add_menu_items[2].enabled = false;
+    sc_ui_widget_button_init_default(&layer->add_menu_items[0],
+                                     sc_ui_id_from_u32(layer, 4), "BUTTON");
+    sc_ui_widget_button_init_default(&layer->add_menu_items[1],
+                                     sc_ui_id_from_u32(layer, 5), "SKILL");
+    sc_ui_widget_button_init_default(&layer->add_menu_items[2],
+                                     sc_ui_id_from_u32(layer, 6), "WALK");
 }
