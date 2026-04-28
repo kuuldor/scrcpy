@@ -5,30 +5,32 @@
 #include "ui_context.h"
 #include "ui_id.h"
 #include "ui_widget_button.h"
+#include "ui_widget_toolbar.h"
 #include "util/log.h"
 
 #define SC_UI_DEMO_MARGIN 12
 #define SC_UI_DEMO_WIDTH 72
 #define SC_UI_DEMO_HEIGHT 32
 #define SC_UI_DEMO_GAP 10
+#define SC_UI_DEMO_TOOLBAR_PADDING 10
 
 static SDL_Rect
-sc_ui_demo_layer_get_rect(const struct sc_ui_geometry *geometry, int index) {
+sc_ui_demo_layer_get_toolbar_rect(const struct sc_ui_geometry *geometry) {
     return (SDL_Rect) {
-        .x = geometry->content_rect.x + SC_UI_DEMO_MARGIN
-           + index * (SC_UI_DEMO_WIDTH + SC_UI_DEMO_GAP),
+        .x = geometry->content_rect.x + SC_UI_DEMO_MARGIN,
         .y = geometry->content_rect.y + SC_UI_DEMO_MARGIN,
-        .w = SC_UI_DEMO_WIDTH,
-        .h = SC_UI_DEMO_HEIGHT,
+        .w = 2 * SC_UI_DEMO_WIDTH + SC_UI_DEMO_GAP
+           + 2 * SC_UI_DEMO_TOOLBAR_PADDING,
+        .h = SC_UI_DEMO_HEIGHT + 2 * SC_UI_DEMO_TOOLBAR_PADDING,
     };
 }
 
 static bool
 sc_ui_demo_layer_has_rect(const struct sc_ui_geometry *geometry) {
+    SDL_Rect panel = sc_ui_demo_layer_get_toolbar_rect(geometry);
     return geometry->has_frame
-        && geometry->content_rect.w >= 2 * SC_UI_DEMO_WIDTH + SC_UI_DEMO_GAP
-                                     + 2 * SC_UI_DEMO_MARGIN
-        && geometry->content_rect.h >= SC_UI_DEMO_HEIGHT + 2 * SC_UI_DEMO_MARGIN;
+        && geometry->content_rect.w >= panel.w + 2 * SC_UI_DEMO_MARGIN
+        && geometry->content_rect.h >= panel.h + 2 * SC_UI_DEMO_MARGIN;
 }
 
 static struct sc_ui_input_result
@@ -79,8 +81,12 @@ sc_ui_demo_layer_render(struct sc_ui_layer *layer,
         return true;
     }
 
-    demo->primary_button.rect = sc_ui_demo_layer_get_rect(geometry, 0);
-    demo->secondary_button.rect = sc_ui_demo_layer_get_rect(geometry, 1);
+    demo->toolbar.panel.rect = sc_ui_demo_layer_get_toolbar_rect(geometry);
+    demo->primary_button.rect = sc_ui_widget_toolbar_get_rect(&demo->toolbar, 0);
+    demo->secondary_button.rect = sc_ui_widget_toolbar_get_rect(&demo->toolbar,
+                                                                1);
+
+    bool ok = sc_ui_widget_toolbar_render(&demo->toolbar, render_ctx);
 
     demo->primary_button.style.fill_color = demo->primary_toggled
                                           ? sc_ui_color_rgba(0x24, 0x8E, 0x78,
@@ -114,7 +120,7 @@ sc_ui_demo_layer_render(struct sc_ui_layer *layer,
                                                     : sc_ui_color_rgba(0xB0, 0x68,
                                                                        0x24, 0xB8);
 
-    bool ok = sc_ui_widget_button_render(&demo->primary_button, render_ctx);
+    ok &= sc_ui_widget_button_render(&demo->primary_button, render_ctx);
     ok &= sc_ui_widget_button_render(&demo->secondary_button, render_ctx);
     return ok;
 }
@@ -153,6 +159,25 @@ sc_ui_demo_layer_init(struct sc_ui_demo_layer *demo) {
         .w = SC_UI_DEMO_WIDTH,
         .h = SC_UI_DEMO_HEIGHT,
     };
+    SDL_Rect panel_rect = {
+        .x = 0,
+        .y = 0,
+        .w = 2 * SC_UI_DEMO_WIDTH + SC_UI_DEMO_GAP
+           + 2 * SC_UI_DEMO_TOOLBAR_PADDING,
+        .h = SC_UI_DEMO_HEIGHT + 2 * SC_UI_DEMO_TOOLBAR_PADDING,
+    };
+    struct sc_ui_widget_toolbar_style toolbar_style = {
+        .panel = {
+            .fill_color = sc_ui_color_rgba(0x12, 0x12, 0x18, 0xA0),
+            .border_color = sc_ui_color_rgba(0xFF, 0xFF, 0xFF, 0x70),
+            .padding = SC_UI_DEMO_TOOLBAR_PADDING,
+        },
+        .item_width = SC_UI_DEMO_WIDTH,
+        .item_height = SC_UI_DEMO_HEIGHT,
+        .item_gap = SC_UI_DEMO_GAP,
+    };
+    sc_ui_widget_toolbar_init(&demo->toolbar, &panel_rect, &toolbar_style);
+
     struct sc_ui_widget_button_style style = {
         .fill_color = sc_ui_color_rgba(0x24, 0x56, 0x78, 0xB8),
         .fill_hover_color = sc_ui_color_rgba(0x24, 0x56, 0xB8, 0xB8),
