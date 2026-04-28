@@ -480,11 +480,10 @@ Use this list to track future work. Implement one item at a time.
     rejection, binding transfer, sorting, metadata preservation, and JSON
     output, and editor selection updates are covered.
 
-## Automatic Touchmap Selection Design
+## Automatic Touchmap Selection
 
-This section describes the current proposed design for automatically selecting a
-touchmap based on the Android game currently running in the foreground. It is a
-planning section only. No code has been committed for this feature yet.
+This section describes the current implementation for automatically selecting a
+touchmap based on the Android package currently running in the foreground.
 
 ### Goal
 
@@ -498,13 +497,13 @@ touchmap matching that package, and load it automatically.
 
 ### Scope
 
-Initial scope should be narrow:
+Current scope is intentionally narrow:
 
 - match by Android package name only;
 - load at most one touchmap for a package;
 - support creating a new empty touchmap for the current foreground package;
 - defer or block auto-switch while the editor has unsaved work;
-- keep foreground-app detection host-side first via polling.
+- keep foreground-app detection host-side via polling.
 
 Out of scope for the first version:
 
@@ -517,11 +516,11 @@ Out of scope for the first version:
 
 ### User-Facing Behavior
 
-Proposed new startup and runtime behavior:
+Current startup and runtime behavior:
 
-- Add a touchmap directory option, tentatively `--gamepad-touchmap-dir`.
-- If this option is not set, the current manual workflow remains unchanged.
-- If it is set, scrcpy scans that directory for touchmap files.
+- `--gamepad-touchmap-dir` enables package-based auto-loading.
+- If this option is not set, the manual workflow remains unchanged.
+- When it is set, scrcpy scans that directory for touchmap files.
 - If `--gamepad-touchmap` is also set, that explicit file is a hard manual
   selection and automatic selection is disabled.
 - Each file participating in auto-load must include top-level `packageName`.
@@ -530,12 +529,12 @@ Proposed new startup and runtime behavior:
 - If found, scrcpy loads it automatically.
 - If not found, scrcpy unloads the current touchmap.
 - If the overlay is visible and no touchmap exists for the package, clicking
-  `NEW` should create an empty in-memory touchmap pre-seeded with that current
+  `NEW` creates an empty in-memory touchmap pre-seeded with that current
   package name.
 
 ### Package Matching Rules
 
-The proposed matching contract is:
+The current matching contract is:
 
 - source of truth: JSON field `packageName`;
 - key type: exact string match against detected foreground package;
@@ -544,40 +543,36 @@ The proposed matching contract is:
 If multiple files claim the same package:
 
 - log a warning;
-- pick one deterministically for now, for example the lexicographically first
-  path;
+- pick one deterministically, currently the lexicographically first path after
+  sorting by package and path;
 - revisit multi-profile selection only if real usage requires it.
 
 This keeps auto-loading explicit and avoids accidental filename-based matches.
 
 ### High-Level Architecture
 
-The proposed first implementation is host-side and split across these modules.
+The current host-side implementation is split across these modules.
 
 #### `app/src/options.{c,h}`
 
-Add new option fields:
+Current relevant option field:
 
 - `const char *touchmap_dir;`
-- possibly a boolean derived state such as `touchmap_auto_enabled`.
-
 This keeps auto-touchmap configuration next to the existing single-file
-`touchmap_file`.
+`touchmap_file` option.
 
 #### `app/src/cli.c`
 
-Add the new CLI option parser for the touchmap directory.
+The CLI parser already supports the touchmap directory option.
 
-Expected behavior:
+Current behavior:
 
 - `--gamepad-touchmap` still loads a specific file manually;
 - `--gamepad-touchmap-dir` enables automatic selection from a directory;
 - if both are present, the explicit `--gamepad-touchmap` file wins and
   auto-selection must not load other map files on app switches.
 
-#### New host-side auto-load modules
-
-Recommended new files:
+#### Host-Side Auto-Load Modules
 
 - `app/src/touchmap_loader.h`
 - `app/src/touchmap_loader.c`
@@ -588,8 +583,7 @@ Recommended new files:
 
 - scanning the touchmap directory;
 - parsing candidate JSON files just far enough to read `packageName`;
-- building and refreshing an index of `packageName -> path`;
-- storing current resolved target path.
+- building and refreshing the package-to-path index.
 
 `fg_app_detect` owns:
 
@@ -622,17 +616,16 @@ Instead, `input_manager` should receive package-change notifications and decide:
 
 #### `app/src/events.h`
 
-Add one new custom SDL event for auto-touchmap package changes.
+One custom SDL event is used for auto-touchmap package changes.
 
-Tentative event:
+Current event:
 
 - `SC_EVENT_FG_APP_CHANGED`
 
-Payload should be a small allocated struct, not a raw C string, since this
-feature is likely to grow. For example:
+The payload is a small allocated struct, not a raw C string:
 
 ```c
-struct sc_touchmap_auto_event {
+struct sc_fg_app_changed_event {
     char *package_name;
 };
 ```
@@ -645,40 +638,40 @@ Ownership rule:
 This follows the SDL user-event ownership model and avoids implicit `data1`
 string contracts.
 
-### Proposed Runtime State
+### Runtime State
 
-The loader should track:
+The loader tracks:
 
 - configured touchmap directory path;
 - whether auto mode is enabled;
 - indexed mapping from package name to touchmap file path;
-- current resolved target touchmap path.
 
-The foreground-app detector should track:
+The foreground-app detector tracks:
 
 - configured device serial;
 - current detected foreground package;
 - polling thread state.
 
-`input_manager` should additionally track:
+`input_manager` additionally tracks:
 
 - whether the current loaded touchmap came from auto mode or manual override;
 - whether an auto-switch is pending because dirty/editing state blocked an
   immediate switch;
 - the pending target package and/or file path if such a switch is deferred.
 
-Tentative `input_manager` additions:
+Current touchmap auto-selection state lives in `struct sc_touchmap_state`:
 
-- `bool touchmap_auto_enabled;`
-- `bool touchmap_auto_override_manual;`
-- `char *touchmap_pending_package;`
-- `char *touchmap_pending_file;`
+- `bool auto_enabled;`
+- `bool manual_override;`
+- `char *current_package;`
+- `char *deferred_package;`
+- `char *deferred_file;`
 
-The exact field names are less important than keeping this state explicit.
+Display/editor runtime state remains centralized there as well.
 
 ### Event and Data Flow
 
-The intended flow is:
+The current flow is:
 
 1. Loader initializes from `touchmap_dir`.
 2. Loader scans all touchmap JSON files and builds an index keyed by
@@ -688,21 +681,21 @@ The intended flow is:
    package name.
 4. When the detected package changes, the detector posts
    `SC_EVENT_FG_APP_CHANGED` to the SDL main thread.
-6. `input_manager` receives the event.
-7. `input_manager` decides among:
+5. `input_manager` receives the event.
+6. `input_manager` decides among:
    - load matching touchmap;
    - unload current touchmap if no match exists;
    - defer switching because of dirty/edit-mode state.
-8. If loading or unloading occurs, `input_manager` refreshes:
-   - `im->game_touchmap`
-   - `im->touchmap_file`
+7. If loading or unloading occurs, `input_manager` refreshes:
+   - `im->touchmap.map`
+   - `im->touchmap.file`
    - display touchmap pointer
    - editor state
    - dirty flags
 
 ### Switching Policy
 
-Recommended policy for package changes:
+Current policy for package changes:
 
 #### When not editing and not dirty
 
@@ -723,24 +716,19 @@ modifying a touchmap.
 
 ### Manual Override Policy
 
-This needs explicit definition before implementation.
+Current behavior:
 
-Current recommended behavior:
-
-- startup `--gamepad-touchmap` disables auto-switching for that session, even
-  if `--gamepad-touchmap-dir` is also provided;
+- startup `--gamepad-touchmap` loads that file as a manual override, even if
+  `--gamepad-touchmap-dir` is also provided;
 - manual `Ctrl+T` load creates a temporary manual override;
 - while manual override is active, auto-detected package changes do not
   immediately replace the manually loaded touchmap;
 - `Ctrl+Shift+T` unload clears manual override and immediately reapplies the
   current foreground package mapping, if one exists;
-- Save and Save As during manual override keep the manual file path current, but
-  do not overwrite loader-resolved auto state;
+- Save and Save As during manual override keep the manual file path current and
+  only rejoin auto mode automatically if the saved file becomes the indexed
+  match for the current foreground package;
 - auto mode resumes only when the manual override is explicitly cleared.
-
-Alternative behavior would be to let the next package change automatically
-rejoin auto mode. That is simpler, but less predictable. This point should be
-settled before coding.
 
 ### Empty-Map Creation in Auto Mode
 
@@ -748,8 +736,8 @@ When no auto-touchmap exists for the current foreground package:
 
 - overlay may still be shown;
 - `NEW` should create an empty map in memory;
-- new map should immediately stamp top-level `packageName` with the current
-  detected package;
+- new map immediately stamps top-level `packageName` with the current detected
+  package when one is known;
 - Save As should prefer a package-based default filename, for example
   `<package>.json`.
 
@@ -757,23 +745,20 @@ This allows a build-from-zero workflow that fits naturally with auto-loading.
 
 ### Directory Indexing Strategy
 
-Recommended first version:
+Current behavior:
 
 - scan directory on startup;
 - include only `.json` files;
 - parse minimally to extract `packageName`;
 - ignore files that fail to parse or do not contain `packageName`;
 - log duplicates and deterministic winner selection;
-- optionally rescan only on explicit demand later.
+- rescan on startup and after successful saves into the auto directory.
 
-Do not add filesystem watching in the first implementation. A startup scan is
-enough for the initial feature.
+Filesystem watching is not implemented.
 
 ### Error Handling
 
-Auto-load failures should be non-fatal.
-
-Recommended behavior:
+Auto-load failures are non-fatal. Current behavior:
 
 - if package detection fails temporarily, keep the current touchmap and retry;
 - if a matching touchmap file exists but fails to parse, log it and treat it as
@@ -940,7 +925,7 @@ Chosen behavior:
 
 ### Focused Test Plan
 
-When implementation begins, focused tests should cover:
+Focused tests cover:
 
 - directory scan extracting `packageName` from valid files;
 - ignoring invalid JSON and files without `packageName`;
@@ -950,26 +935,28 @@ When implementation begins, focused tests should cover:
 - deferred switch behavior when dirty or editing;
 - resuming a deferred switch after editing ends;
 - `NEW` in auto mode seeding `packageName`;
-- package-based default Save As filename selection if that feature is added.
+- package-based default Save As filename selection.
 
 Current verification status:
 
 - focused tests exist for package metadata helpers, directory indexing,
   duplicate resolution, and foreground-package polling;
 - build and automated test runs pass locally;
-- input-manager auto-switch policy still needs more isolated unit coverage;
-- connected-device package-switch testing is still pending.
+- input-manager auto-switch decision logic is covered by `app/tests/test_touchmap_state.c`;
+- connected-device package-switch testing remains valuable as integration coverage.
 
-### Open Design Questions
+### Remaining Questions
 
 Foreground-app detection for the first version is intentionally host-side and
 polling-based.
 
-The following questions still need discussion:
+The current first-version behavior is settled, but these future questions
+remain open:
 
-- what exact Android command or API should be the source of truth?
-- how should manual override interact with future auto-switches?
-- should auto mode unload on no-match, or keep the previous map?
+- whether the `dumpsys activity activities` query should later be replaced by a
+  more stable Android signal;
+- whether multiple profiles per package are worth supporting;
+- whether package matching should later consider activity names or titles.
 
 Server-side app-switch detection remains a later improvement. It would require:
 
@@ -978,10 +965,7 @@ Server-side app-switch detection remains a later improvement. It would require:
 - host-side integration of that new message into the same auto-switch policy.
 
 That server-side design is intentionally deferred until the host-side polling
-version exists and proves the switching policy and user workflow.
-
-Until the remaining questions are settled, this section should be treated as
-the current best implementation plan, not a fixed final design.
+version proves sufficient or real usage shows clear shortcomings.
 
 ### Later Todo: Server-Side App Detection
 
