@@ -6,8 +6,8 @@
 #include <stdbool.h>
 #include <SDL2/SDL.h>
 
-#include "touchmap.h"
-#include "touchmap_state.h"
+#include "touchmap/touchmap.h"
+#include "touchmap/touchmap_state.h"
 #include "options.h"
 #include "coords.h"
 

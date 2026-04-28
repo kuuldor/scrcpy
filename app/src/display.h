@@ -11,7 +11,7 @@
 #include "coords.h"
 #include "opengl.h"
 #include "options.h"
-#include "touchmap_state.h"
+#include "touchmap/touchmap_state.h"
 #include "ui/ui_context.h"
 
 #ifdef __APPLE__

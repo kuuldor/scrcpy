@@ -5,9 +5,9 @@
 
 #include <stdbool.h>
 
-#include "touchmap.h"
-#include "touchmap_editor.h"
-#include "touchmap_loader.h"
+#include "touchmap/touchmap.h"
+#include "touchmap/touchmap_editor.h"
+#include "touchmap/touchmap_loader.h"
 
 enum sc_touchmap_overlay_control {
     SC_TOUCHMAP_OVERLAY_CONTROL_NONE,

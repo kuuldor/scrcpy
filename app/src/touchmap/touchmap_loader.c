@@ -1,11 +1,11 @@
-#include "touchmap_loader.h"
+#include "touchmap/touchmap_loader.h"
 
 #include <dirent.h>
 #include <SDL2/SDL.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "touchmap.h"
+#include "touchmap/touchmap.h"
 #include "util/file.h"
 #include "util/log.h"
 

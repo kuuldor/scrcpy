@@ -13,6 +13,8 @@
 #include "ui_render.h"
 #include "ui_text.h"
 #include "ui_types.h"
+#include "ui_widget_action_menu.h"
+#include "ui_widget_action_button.h"
 #include "ui_widget_button.h"
 #include "ui_widget_label.h"
 #include "ui_widget_menu.h"

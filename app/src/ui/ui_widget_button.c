@@ -97,6 +97,19 @@ sc_ui_widget_button_fit_to_content(struct sc_ui_widget_button *button) {
 }
 
 void
+sc_ui_widget_button_set_label(struct sc_ui_widget_button *button,
+                              const char *label) {
+    button->label = label;
+}
+
+void
+sc_ui_widget_button_set_label_and_fit(struct sc_ui_widget_button *button,
+                                      const char *label) {
+    button->label = label;
+    sc_ui_widget_button_fit_to_content(button);
+}
+
+void
 sc_ui_widget_button_apply_variant(struct sc_ui_widget_button *button,
                                   enum sc_ui_widget_button_variant variant) {
     button->style = sc_ui_widget_button_style_variant(variant);
@@ -136,6 +149,13 @@ sc_ui_widget_button_set_size(struct sc_ui_widget_button *button,
                              int32_t width, int32_t height) {
     button->rect.w = width;
     button->rect.h = height;
+}
+
+void
+sc_ui_widget_button_place_top_right(struct sc_ui_widget_button *button,
+                                    struct sc_size bounds, int margin) {
+    button->rect.x = bounds.width - button->rect.w - margin;
+    button->rect.y = margin;
 }
 
 void

@@ -5,7 +5,7 @@
 #include <string.h>
 #include <libavutil/pixfmt.h>
 
-#include "touchmap_overlay.h"
+#include "touchmap/touchmap_overlay.h"
 #include "util/log.h"
 
 static bool

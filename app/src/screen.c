@@ -10,7 +10,7 @@
 #include "options.h"
 #include "ui/ui_context.h"
 #include "ui/ui_demo_layer.h"
-#include "ui/ui_touchmap_layer.h"
+#include "touchmap/ui_touchmap_layer.h"
 #include "util/env.h"
 #include "util/log.h"
 

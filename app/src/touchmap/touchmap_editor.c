@@ -1,4 +1,4 @@
-#include "touchmap_editor.h"
+#include "touchmap/touchmap_editor.h"
 
 #include <math.h>
 #include <stdlib.h>

@@ -20,7 +20,7 @@
 #include "options.h"
 #include "ui/ui_context.h"
 #include "ui/ui_demo_layer.h"
-#include "ui/ui_touchmap_layer.h"
+#include "touchmap/ui_touchmap_layer.h"
 #include "trait/key_processor.h"
 #include "trait/frame_sink.h"
 #include "trait/mouse_processor.h"

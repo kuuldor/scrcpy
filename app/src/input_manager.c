@@ -14,8 +14,8 @@
 #include "util/file.h"
 #include "util/log.h"
 
-#include "touchmap.h"
-#include "touchmap_overlay.h"
+#include "touchmap/touchmap.h"
+#include "touchmap/touchmap_overlay.h"
 #include "third_party/tfd/tinyfiledialogs.h"
 #include "events.h"
 

@@ -6,7 +6,7 @@
 #include <stdbool.h>
 
 #include "coords.h"
-#include "touchmap.h"
+#include "touchmap/touchmap.h"
 
 enum sc_touchmap_editor_target {
     SC_TOUCHMAP_EDITOR_TARGET_NONE,

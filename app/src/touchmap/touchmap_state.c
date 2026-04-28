@@ -1,8 +1,8 @@
-#include "touchmap_state.h"
+#include "touchmap/touchmap_state.h"
 
 #include <SDL2/SDL.h>
 
-#include "touchmap_overlay.h"
+#include "touchmap/touchmap_overlay.h"
 #include "util/log.h"
 
 static struct sc_touchmap_switch_decision

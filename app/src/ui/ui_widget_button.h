@@ -56,6 +56,14 @@ void
 sc_ui_widget_button_fit_to_content(struct sc_ui_widget_button *button);
 
 void
+sc_ui_widget_button_set_label(struct sc_ui_widget_button *button,
+                              const char *label);
+
+void
+sc_ui_widget_button_set_label_and_fit(struct sc_ui_widget_button *button,
+                                      const char *label);
+
+void
 sc_ui_widget_button_apply_variant(struct sc_ui_widget_button *button,
                                   enum sc_ui_widget_button_variant variant);
 
@@ -70,6 +78,10 @@ sc_ui_widget_button_max_height(const struct sc_ui_widget_button *buttons,
 void
 sc_ui_widget_button_set_size(struct sc_ui_widget_button *button,
                              int32_t width, int32_t height);
+
+void
+sc_ui_widget_button_place_top_right(struct sc_ui_widget_button *button,
+                                    struct sc_size bounds, int margin);
 
 void
 sc_ui_widget_button_reset(struct sc_ui_widget_button *button,
