@@ -7,17 +7,14 @@
 #include <stddef.h>
 
 #include "coords.h"
+#include "ui_widget_action_button.h"
 #include "ui_widget_button.h"
 #include "ui_widget_menu.h"
 #include "ui_widget_panel.h"
 
 #define SC_UI_WIDGET_ACTION_MENU_MAX_BUTTONS 8
-#define SC_UI_WIDGET_ACTION_MENU_ACTION_NONE (-1)
-
 struct sc_ui_widget_action_menu_result {
     struct sc_ui_input_result input;
-    int action_id;
-    bool from_menu;
     bool clicked_outside;
 };
 
@@ -25,11 +22,12 @@ struct sc_ui_widget_action_menu {
     struct sc_ui_widget_panel toolbar_panel;
     struct sc_ui_widget_menu menu;
     struct sc_ui_widget_button *toolbar_buttons[SC_UI_WIDGET_ACTION_MENU_MAX_BUTTONS];
-    int toolbar_action_ids[SC_UI_WIDGET_ACTION_MENU_MAX_BUTTONS];
+    sc_ui_widget_action_handler toolbar_actions[SC_UI_WIDGET_ACTION_MENU_MAX_BUTTONS];
     size_t toolbar_button_count;
     struct sc_ui_widget_button *menu_buttons[SC_UI_WIDGET_ACTION_MENU_MAX_BUTTONS];
-    int menu_action_ids[SC_UI_WIDGET_ACTION_MENU_MAX_BUTTONS];
+    sc_ui_widget_action_handler menu_actions[SC_UI_WIDGET_ACTION_MENU_MAX_BUTTONS];
     size_t menu_button_count;
+    void *userdata;
     int margin;
     int padding;
     int gap;
@@ -40,14 +38,30 @@ void
 sc_ui_widget_action_menu_init(struct sc_ui_widget_action_menu *action_menu,
                               struct sc_ui_widget_button **toolbar_buttons,
                               size_t toolbar_button_count,
-                              const int *toolbar_action_ids,
+                              const sc_ui_widget_action_handler *toolbar_actions,
                               struct sc_ui_widget_button **menu_buttons,
                               size_t menu_button_count,
-                              const int *menu_action_ids);
+                              const sc_ui_widget_action_handler *menu_actions,
+                              void *userdata);
 
 void
 sc_ui_widget_action_menu_layout_top_right(
     struct sc_ui_widget_action_menu *action_menu, struct sc_size bounds);
+
+void
+sc_ui_widget_action_menu_set_spacing(struct sc_ui_widget_action_menu *action_menu,
+                                     int margin, int padding, int gap,
+                                     int menu_gap);
+
+void
+sc_ui_widget_action_menu_apply_variants(
+    struct sc_ui_widget_action_menu *action_menu,
+    const enum sc_ui_widget_button_variant *toolbar_variants,
+    const enum sc_ui_widget_button_variant *menu_variants);
+
+void
+sc_ui_widget_action_menu_set_menu_button_enabled(
+    struct sc_ui_widget_action_menu *action_menu, size_t index, bool enabled);
 
 bool
 sc_ui_widget_action_menu_render(

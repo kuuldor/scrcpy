@@ -2,9 +2,12 @@
 
 void
 sc_ui_widget_action_button_init(struct sc_ui_widget_action_button *action_button,
-                                sc_ui_id id, const char *label, int action_id) {
+                                sc_ui_id id, const char *label,
+                                sc_ui_widget_action_handler action,
+                                void *userdata) {
     sc_ui_widget_button_init_default(&action_button->button, id, label);
-    action_button->action_id = action_id;
+    action_button->action = action;
+    action_button->userdata = userdata;
     action_button->margin = 8;
 }
 
@@ -16,7 +19,22 @@ sc_ui_widget_action_button_layout_top_right(
                                         action_button->margin);
 }
 
-struct sc_ui_widget_action_button_result
+void
+sc_ui_widget_action_button_apply_variant(
+    struct sc_ui_widget_action_button *action_button,
+    enum sc_ui_widget_button_variant variant) {
+    sc_ui_widget_button_apply_variant(&action_button->button, variant);
+}
+
+void
+sc_ui_widget_action_button_set_label_and_layout_top_right(
+    struct sc_ui_widget_action_button *action_button,
+    const char *label, struct sc_size bounds) {
+    sc_ui_widget_button_set_label(&action_button->button, label);
+    sc_ui_widget_action_button_layout_top_right(action_button, bounds);
+}
+
+struct sc_ui_input_result
 sc_ui_widget_action_button_handle_event(
     struct sc_ui_widget_action_button *action_button,
     struct sc_ui_context *ui, struct sc_ui_layer *layer,
@@ -24,12 +42,12 @@ sc_ui_widget_action_button_handle_event(
     struct sc_ui_button_result button_result =
         sc_ui_widget_button_handle_event(&action_button->button, ui, layer,
                                          event);
-    return (struct sc_ui_widget_action_button_result) {
-        .input = button_result.input,
-        .action_id = button_result.action == SC_UI_BUTTON_ACTION_CLICK
-                   ? action_button->action_id
-                   : SC_UI_WIDGET_ACTION_BUTTON_ACTION_NONE,
-    };
+    struct sc_ui_input_result result = button_result.input;
+    if (button_result.action == SC_UI_BUTTON_ACTION_CLICK
+            && action_button->action) {
+        action_button->action(action_button->userdata, &result);
+    }
+    return result;
 }
 
 bool

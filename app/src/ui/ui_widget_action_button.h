@@ -6,28 +6,37 @@
 #include "coords.h"
 #include "ui_widget_button.h"
 
-#define SC_UI_WIDGET_ACTION_BUTTON_ACTION_NONE (-1)
-
-struct sc_ui_widget_action_button_result {
-    struct sc_ui_input_result input;
-    int action_id;
-};
+typedef void (*sc_ui_widget_action_handler)(void *userdata,
+                                            struct sc_ui_input_result *result);
 
 struct sc_ui_widget_action_button {
     struct sc_ui_widget_button button;
-    int action_id;
+    sc_ui_widget_action_handler action;
+    void *userdata;
     int margin;
 };
 
 void
 sc_ui_widget_action_button_init(struct sc_ui_widget_action_button *action_button,
-                                sc_ui_id id, const char *label, int action_id);
+                                sc_ui_id id, const char *label,
+                                sc_ui_widget_action_handler action,
+                                void *userdata);
 
 void
 sc_ui_widget_action_button_layout_top_right(
     struct sc_ui_widget_action_button *action_button, struct sc_size bounds);
 
-struct sc_ui_widget_action_button_result
+void
+sc_ui_widget_action_button_apply_variant(
+    struct sc_ui_widget_action_button *action_button,
+    enum sc_ui_widget_button_variant variant);
+
+void
+sc_ui_widget_action_button_set_label_and_layout_top_right(
+    struct sc_ui_widget_action_button *action_button,
+    const char *label, struct sc_size bounds);
+
+struct sc_ui_input_result
 sc_ui_widget_action_button_handle_event(
     struct sc_ui_widget_action_button *action_button,
     struct sc_ui_context *ui, struct sc_ui_layer *layer,

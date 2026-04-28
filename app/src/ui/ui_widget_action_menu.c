@@ -37,10 +37,11 @@ void
 sc_ui_widget_action_menu_init(struct sc_ui_widget_action_menu *action_menu,
                               struct sc_ui_widget_button **toolbar_buttons,
                               size_t toolbar_button_count,
-                              const int *toolbar_action_ids,
+                              const sc_ui_widget_action_handler *toolbar_actions,
                               struct sc_ui_widget_button **menu_buttons,
                               size_t menu_button_count,
-                              const int *menu_action_ids) {
+                              const sc_ui_widget_action_handler *menu_actions,
+                              void *userdata) {
     sc_ui_widget_panel_init_default(&action_menu->toolbar_panel);
     sc_ui_widget_menu_init_default(&action_menu->menu);
     assert(toolbar_button_count <= SC_UI_WIDGET_ACTION_MENU_MAX_BUTTONS);
@@ -49,12 +50,13 @@ sc_ui_widget_action_menu_init(struct sc_ui_widget_action_menu *action_menu,
     action_menu->menu_button_count = menu_button_count;
     for (size_t i = 0; i < toolbar_button_count; ++i) {
         action_menu->toolbar_buttons[i] = toolbar_buttons[i];
-        action_menu->toolbar_action_ids[i] = toolbar_action_ids[i];
+        action_menu->toolbar_actions[i] = toolbar_actions[i];
     }
     for (size_t i = 0; i < menu_button_count; ++i) {
         action_menu->menu_buttons[i] = menu_buttons[i];
-        action_menu->menu_action_ids[i] = menu_action_ids[i];
+        action_menu->menu_actions[i] = menu_actions[i];
     }
+    action_menu->userdata = userdata;
     action_menu->margin = 8;
     action_menu->padding = 6;
     action_menu->gap = 6;
@@ -116,6 +118,38 @@ sc_ui_widget_action_menu_layout_top_right(
     }
 }
 
+void
+sc_ui_widget_action_menu_set_spacing(struct sc_ui_widget_action_menu *action_menu,
+                                     int margin, int padding, int gap,
+                                     int menu_gap) {
+    action_menu->margin = margin;
+    action_menu->padding = padding;
+    action_menu->gap = gap;
+    action_menu->menu_gap = menu_gap;
+}
+
+void
+sc_ui_widget_action_menu_apply_variants(
+    struct sc_ui_widget_action_menu *action_menu,
+    const enum sc_ui_widget_button_variant *toolbar_variants,
+    const enum sc_ui_widget_button_variant *menu_variants) {
+    for (size_t i = 0; i < action_menu->toolbar_button_count; ++i) {
+        sc_ui_widget_button_apply_variant(action_menu->toolbar_buttons[i],
+                                          toolbar_variants[i]);
+    }
+    for (size_t i = 0; i < action_menu->menu_button_count; ++i) {
+        sc_ui_widget_button_apply_variant(action_menu->menu_buttons[i],
+                                          menu_variants[i]);
+    }
+}
+
+void
+sc_ui_widget_action_menu_set_menu_button_enabled(
+    struct sc_ui_widget_action_menu *action_menu, size_t index, bool enabled) {
+    assert(index < action_menu->menu_button_count);
+    action_menu->menu_buttons[index]->enabled = enabled;
+}
+
 bool
 sc_ui_widget_action_menu_render(
     const struct sc_ui_widget_action_menu *action_menu,
@@ -146,8 +180,6 @@ sc_ui_widget_action_menu_handle_event(
     const struct sc_ui_event *event, bool menu_open) {
     struct sc_ui_widget_action_menu_result result = {
         .input = {false, false},
-        .action_id = SC_UI_WIDGET_ACTION_MENU_ACTION_NONE,
-        .from_menu = false,
         .clicked_outside = false,
     };
 
@@ -157,7 +189,10 @@ sc_ui_widget_action_menu_handle_event(
                                              ui, layer, event);
         result.input = button_result.input;
         if (button_result.action == SC_UI_BUTTON_ACTION_CLICK) {
-            result.action_id = action_menu->toolbar_action_ids[i];
+            if (action_menu->toolbar_actions[i]) {
+                action_menu->toolbar_actions[i](action_menu->userdata,
+                                                &result.input);
+            }
             return result;
         }
         if (result.input.consumed) {
@@ -179,8 +214,10 @@ sc_ui_widget_action_menu_handle_event(
             sc_ui_widget_button_handle_event(button, ui, layer, event);
         result.input = button_result.input;
         if (button_result.action == SC_UI_BUTTON_ACTION_CLICK) {
-            result.action_id = action_menu->menu_action_ids[i];
-            result.from_menu = true;
+            if (action_menu->menu_actions[i]) {
+                action_menu->menu_actions[i](action_menu->userdata,
+                                             &result.input);
+            }
             return result;
         }
         if (result.input.consumed) {
