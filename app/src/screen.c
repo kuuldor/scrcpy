@@ -7,6 +7,7 @@
 #include "events.h"
 #include "icon.h"
 #include "options.h"
+#include "ui/ui_context.h"
 #include "util/log.h"
 
 #define DISPLAY_MARGINS 96
@@ -213,8 +214,17 @@ sc_screen_render(struct sc_screen *screen, bool update_content_rect) {
         sc_screen_update_content_rect(screen);
     }
 
+    struct sc_ui_geometry ui_geometry = {
+        .frame_size = screen->frame_size,
+        .content_rect = screen->rect,
+        .orientation = screen->orientation,
+        .has_frame = screen->has_frame,
+    };
+    sc_ui_context_set_geometry(&screen->ui, &ui_geometry);
+
     enum sc_display_result res =
         sc_display_render(&screen->display, &screen->rect, screen->orientation,
+                          &screen->ui,
                           &screen->im.touchmap);
     (void) res; // any error already logged
 }
@@ -222,7 +232,8 @@ sc_screen_render(struct sc_screen *screen, bool update_content_rect) {
 static void
 sc_screen_render_novideo(struct sc_screen *screen) {
     enum sc_display_result res =
-        sc_display_render(&screen->display, NULL, SC_ORIENTATION_0, NULL);
+        sc_display_render(&screen->display, NULL, SC_ORIENTATION_0,
+                          &screen->ui, NULL);
     (void) res; // any error already logged
 }
 
@@ -430,6 +441,13 @@ sc_screen_init(struct sc_screen *screen,
         goto error_destroy_display;
     }
 
+    struct sc_ui_context_params ui_params = {
+        .window = screen->window,
+    };
+    if (!sc_ui_context_init(&screen->ui, &ui_params)) {
+        goto error_destroy_frame;
+    }
+
     struct sc_input_manager_params im_params = {
         .controller = params->controller,
         .fp = params->fp,
@@ -448,7 +466,7 @@ sc_screen_init(struct sc_screen *screen,
     };
 
     if (!sc_input_manager_init(&screen->im, &im_params)) {
-        goto error_destroy_frame;
+        goto error_destroy_ui;
     }
     if (screen->im.touchmap.loader.enabled
             && !sc_fg_app_detect_start(&screen->im.fg_app_detect)) {
@@ -485,6 +503,8 @@ sc_screen_init(struct sc_screen *screen,
 
 error_destroy_input_manager:
     sc_input_manager_destroy(&screen->im);
+error_destroy_ui:
+    sc_ui_context_destroy(&screen->ui);
 error_destroy_frame:
     av_frame_free(&screen->frame);
 error_destroy_display:
@@ -547,6 +567,7 @@ sc_screen_destroy(struct sc_screen *screen) {
     assert(!screen->open);
 #endif
     sc_input_manager_destroy(&screen->im);
+    sc_ui_context_destroy(&screen->ui);
     sc_display_destroy(&screen->display);
     av_frame_free(&screen->frame);
     SDL_DestroyWindow(screen->window);
@@ -697,6 +718,107 @@ sc_screen_apply_frame(struct sc_screen *screen) {
 
     sc_screen_render(screen, false);
     return true;
+}
+
+static bool
+sc_screen_handle_ui_event(struct sc_screen *screen, const SDL_Event *event) {
+    struct sc_ui_event ui_event;
+    bool has_ui_event = true;
+
+    switch (event->type) {
+        case SDL_TEXTINPUT:
+            ui_event.type = SC_UI_EVENT_TEXT_INPUT;
+            SDL_strlcpy(ui_event.data.text.text, event->text.text,
+                        sizeof(ui_event.data.text.text));
+            break;
+        case SDL_KEYDOWN:
+            ui_event.type = SC_UI_EVENT_KEY_DOWN;
+            ui_event.data.key = (struct sc_ui_key_event) {
+                .keycode = event->key.keysym.sym,
+                .mod = event->key.keysym.mod,
+                .repeat = event->key.repeat,
+            };
+            break;
+        case SDL_KEYUP:
+            ui_event.type = SC_UI_EVENT_KEY_UP;
+            ui_event.data.key = (struct sc_ui_key_event) {
+                .keycode = event->key.keysym.sym,
+                .mod = event->key.keysym.mod,
+                .repeat = event->key.repeat,
+            };
+            break;
+        case SDL_MOUSEMOTION: {
+            int32_t x = event->motion.x;
+            int32_t y = event->motion.y;
+            sc_screen_hidpi_scale_coords(screen, &x, &y);
+            ui_event.type = SC_UI_EVENT_POINTER_MOVE;
+            ui_event.data.pointer = (struct sc_ui_pointer_event) {
+                .x = x,
+                .y = y,
+                .xrel = event->motion.xrel,
+                .yrel = event->motion.yrel,
+                .wheel_x = 0,
+                .wheel_y = 0,
+                .button = SC_UI_POINTER_BUTTON_NONE,
+                .buttons_state = event->motion.state,
+            };
+            break;
+        }
+        case SDL_MOUSEBUTTONDOWN:
+        case SDL_MOUSEBUTTONUP: {
+            int32_t x = event->button.x;
+            int32_t y = event->button.y;
+            sc_screen_hidpi_scale_coords(screen, &x, &y);
+            ui_event.type = event->type == SDL_MOUSEBUTTONDOWN
+                          ? SC_UI_EVENT_POINTER_DOWN
+                          : SC_UI_EVENT_POINTER_UP;
+            ui_event.data.pointer = (struct sc_ui_pointer_event) {
+                .x = x,
+                .y = y,
+                .xrel = 0,
+                .yrel = 0,
+                .wheel_x = 0,
+                .wheel_y = 0,
+                .button = event->button.button,
+                .buttons_state = event->button.state,
+            };
+            break;
+        }
+        case SDL_MOUSEWHEEL:
+            ui_event.type = SC_UI_EVENT_POINTER_WHEEL;
+            ui_event.data.pointer = (struct sc_ui_pointer_event) {
+                .x = 0,
+                .y = 0,
+                .xrel = 0,
+                .yrel = 0,
+                .wheel_x = event->wheel.x,
+                .wheel_y = event->wheel.y,
+                .button = SC_UI_POINTER_BUTTON_NONE,
+                .buttons_state = 0,
+            };
+            break;
+        case SDL_WINDOWEVENT:
+            if (event->window.event == SDL_WINDOWEVENT_FOCUS_LOST) {
+                ui_event.type = SC_UI_EVENT_FOCUS_LOST;
+                break;
+            }
+            has_ui_event = false;
+            break;
+        default:
+            has_ui_event = false;
+            break;
+    }
+
+    if (!has_ui_event) {
+        return false;
+    }
+
+    struct sc_ui_input_result result =
+        sc_ui_context_handle_event(&screen->ui, &ui_event);
+    if (result.request_refresh && screen->video && screen->has_frame) {
+        sc_push_event(SC_EVENT_SCREEN_REFRESH);
+    }
+    return result.consumed;
 }
 
 static bool
@@ -881,6 +1003,10 @@ sc_screen_handle_event(struct sc_screen *screen, const SDL_Event *event) {
                     break;
             }
             return true;
+    }
+
+    if (sc_screen_handle_ui_event(screen, event)) {
+        return true;
     }
 
     if (sc_screen_is_relative_mode(screen)

@@ -305,6 +305,7 @@ sc_display_update_texture(struct sc_display *display, const AVFrame *frame) {
 enum sc_display_result
 sc_display_render(struct sc_display *display, const SDL_Rect *geometry,
                   enum sc_orientation orientation,
+                  struct sc_ui_context *ui,
                   const struct sc_touchmap_state *touchmap_state) {
     SDL_RenderClear(display->renderer);
 
@@ -346,6 +347,14 @@ sc_display_render(struct sc_display *display, const SDL_Rect *geometry,
                                    NULL, flip);
         if (ret) {
             LOGE("Could not render texture: %s", SDL_GetError());
+            return SC_DISPLAY_RESULT_ERROR;
+        }
+    }
+
+    if (ui) {
+        bool ok = sc_ui_context_render(ui, display->renderer);
+        if (!ok) {
+            LOGE("Could not render UI layers");
             return SC_DISPLAY_RESULT_ERROR;
         }
     }
