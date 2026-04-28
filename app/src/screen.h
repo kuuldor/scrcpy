@@ -19,6 +19,7 @@
 #include "mouse_capture.h"
 #include "options.h"
 #include "ui/ui_context.h"
+#include "ui/ui_demo_layer.h"
 #include "trait/key_processor.h"
 #include "trait/frame_sink.h"
 #include "trait/mouse_processor.h"
@@ -34,6 +35,7 @@ struct sc_screen {
 
     struct sc_display display;
     struct sc_ui_context ui;
+    struct sc_ui_demo_layer ui_demo;
     struct sc_input_manager im;
     struct sc_mouse_capture mc; // only used in mouse relative mode
     struct sc_frame_buffer fb;

@@ -96,6 +96,10 @@ void
 sc_ui_context_release_pointer_capture(struct sc_ui_context *ui);
 
 void
+sc_ui_context_capture_pointer(struct sc_ui_context *ui,
+                              struct sc_ui_layer *layer);
+
+void
 sc_ui_context_release_focus(struct sc_ui_context *ui);
 
 sc_ui_id
@@ -106,6 +110,12 @@ sc_ui_context_get_active_id(const struct sc_ui_context *ui);
 
 sc_ui_id
 sc_ui_context_get_focus_id(const struct sc_ui_context *ui);
+
+void
+sc_ui_context_set_hover_id(struct sc_ui_context *ui, sc_ui_id id);
+
+void
+sc_ui_context_set_active_id(struct sc_ui_context *ui, sc_ui_id id);
 
 struct sc_ui_layer *
 sc_ui_context_get_capture_layer(const struct sc_ui_context *ui);

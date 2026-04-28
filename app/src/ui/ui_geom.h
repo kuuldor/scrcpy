@@ -17,4 +17,10 @@ struct sc_ui_geometry {
     bool has_frame;
 };
 
+static inline bool
+sc_ui_geom_point_in_rect(int32_t x, int32_t y, const SDL_Rect *rect) {
+    return x >= rect->x && x < rect->x + rect->w
+        && y >= rect->y && y < rect->y + rect->h;
+}
+
 #endif

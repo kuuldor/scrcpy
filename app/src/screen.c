@@ -1,6 +1,7 @@
 #include "screen.h"
 
 #include <assert.h>
+#include <stdlib.h>
 #include <string.h>
 #include <SDL2/SDL.h>
 
@@ -8,6 +9,8 @@
 #include "icon.h"
 #include "options.h"
 #include "ui/ui_context.h"
+#include "ui/ui_demo_layer.h"
+#include "util/env.h"
 #include "util/log.h"
 
 #define DISPLAY_MARGINS 96
@@ -446,6 +449,17 @@ sc_screen_init(struct sc_screen *screen,
     };
     if (!sc_ui_context_init(&screen->ui, &ui_params)) {
         goto error_destroy_frame;
+    }
+
+    sc_ui_demo_layer_init(&screen->ui_demo);
+    char *ui_demo = sc_get_env("SCRCPY_UI_DEMO");
+    bool enable_ui_demo = ui_demo && ui_demo[0] && SDL_strcmp(ui_demo, "0");
+    free(ui_demo);
+    if (enable_ui_demo) {
+        LOGI("UI demo layer enabled");
+        if (!sc_ui_context_add_layer(&screen->ui, &screen->ui_demo.layer, 0)) {
+            goto error_destroy_ui;
+        }
     }
 
     struct sc_input_manager_params im_params = {
