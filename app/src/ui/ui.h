@@ -11,5 +11,6 @@
 #include "ui_render.h"
 #include "ui_text.h"
 #include "ui_types.h"
+#include "ui_widget_button.h"
 
 #endif

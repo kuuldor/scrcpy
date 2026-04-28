@@ -5,13 +5,15 @@
 
 #include <stdbool.h>
 
-#include "ui_button.h"
 #include "ui_layer.h"
+#include "ui_widget_button.h"
 
 struct sc_ui_demo_layer {
     struct sc_ui_layer layer;
-    struct sc_ui_button_state button;
-    bool toggled;
+    struct sc_ui_widget_button primary_button;
+    struct sc_ui_widget_button secondary_button;
+    bool primary_toggled;
+    bool secondary_toggled;
 };
 
 void

@@ -2,20 +2,21 @@
 
 #include <SDL2/SDL.h>
 
-#include "ui_button.h"
 #include "ui_context.h"
-#include "ui_draw.h"
 #include "ui_id.h"
-#include "ui_text.h"
+#include "ui_widget_button.h"
+#include "util/log.h"
 
 #define SC_UI_DEMO_MARGIN 12
 #define SC_UI_DEMO_WIDTH 72
 #define SC_UI_DEMO_HEIGHT 32
+#define SC_UI_DEMO_GAP 10
 
 static SDL_Rect
-sc_ui_demo_layer_get_rect(const struct sc_ui_geometry *geometry) {
+sc_ui_demo_layer_get_rect(const struct sc_ui_geometry *geometry, int index) {
     return (SDL_Rect) {
-        .x = geometry->content_rect.x + SC_UI_DEMO_MARGIN,
+        .x = geometry->content_rect.x + SC_UI_DEMO_MARGIN
+           + index * (SC_UI_DEMO_WIDTH + SC_UI_DEMO_GAP),
         .y = geometry->content_rect.y + SC_UI_DEMO_MARGIN,
         .w = SC_UI_DEMO_WIDTH,
         .h = SC_UI_DEMO_HEIGHT,
@@ -25,7 +26,8 @@ sc_ui_demo_layer_get_rect(const struct sc_ui_geometry *geometry) {
 static bool
 sc_ui_demo_layer_has_rect(const struct sc_ui_geometry *geometry) {
     return geometry->has_frame
-        && geometry->content_rect.w >= SC_UI_DEMO_WIDTH + 2 * SC_UI_DEMO_MARGIN
+        && geometry->content_rect.w >= 2 * SC_UI_DEMO_WIDTH + SC_UI_DEMO_GAP
+                                     + 2 * SC_UI_DEMO_MARGIN
         && geometry->content_rect.h >= SC_UI_DEMO_HEIGHT + 2 * SC_UI_DEMO_MARGIN;
 }
 
@@ -38,17 +40,31 @@ sc_ui_demo_layer_handle_event(struct sc_ui_layer *layer,
 
     struct sc_ui_input_result result = {false, false};
     if (!geometry->has_frame) {
-        sc_ui_button_reset(&demo->button, ui, layer);
+        sc_ui_widget_button_reset(&demo->primary_button, ui, layer);
+        sc_ui_widget_button_reset(&demo->secondary_button, ui, layer);
         return result;
     }
 
-    SDL_Rect rect = sc_ui_demo_layer_get_rect(geometry);
-    struct sc_ui_button_result button_result =
-        sc_ui_button_handle_event(&demo->button, ui, layer, &rect, event);
-    result = button_result.input;
+    struct sc_ui_button_result primary_result =
+        sc_ui_widget_button_handle_event(&demo->primary_button, ui, layer,
+                                         event);
+    result = primary_result.input;
+    if (primary_result.action == SC_UI_BUTTON_ACTION_CLICK) {
+        demo->primary_toggled = !demo->primary_toggled;
+        LOGI("UI demo primary button clicked (%s)",
+             demo->primary_toggled ? "toggled on" : "toggled off");
+    }
 
-    if (button_result.action == SC_UI_BUTTON_ACTION_CLICK) {
-        demo->toggled = !demo->toggled;
+    if (!result.consumed) {
+        struct sc_ui_button_result secondary_result =
+            sc_ui_widget_button_handle_event(&demo->secondary_button, ui,
+                                             layer, event);
+        result = secondary_result.input;
+        if (secondary_result.action == SC_UI_BUTTON_ACTION_CLICK) {
+            demo->secondary_toggled = !demo->secondary_toggled;
+            LOGI("UI demo secondary button clicked (%s)",
+                 demo->secondary_toggled ? "toggled on" : "toggled off");
+        }
     }
 
     return result;
@@ -63,31 +79,43 @@ sc_ui_demo_layer_render(struct sc_ui_layer *layer,
         return true;
     }
 
-    SDL_Rect rect = sc_ui_demo_layer_get_rect(geometry);
-    SDL_Renderer *renderer = render_ctx->renderer;
+    demo->primary_button.rect = sc_ui_demo_layer_get_rect(geometry, 0);
+    demo->secondary_button.rect = sc_ui_demo_layer_get_rect(geometry, 1);
 
-    Uint8 r = 0x24;
-    Uint8 g = demo->toggled ? 0x8E : 0x56;
-    Uint8 b = demo->button.pressed ? 0xD8
-            : demo->button.hovered ? 0xB8
-                                   : 0x78;
-    Uint8 a = 0xB8;
+    demo->primary_button.style.fill_color = demo->primary_toggled
+                                          ? sc_ui_color_rgba(0x24, 0x8E, 0x78,
+                                                             0xB8)
+                                          : sc_ui_color_rgba(0x24, 0x56, 0x78,
+                                                             0xB8);
+    demo->primary_button.style.fill_hover_color = demo->primary_toggled
+                                                ? sc_ui_color_rgba(0x24, 0x8E,
+                                                                   0xB8, 0xB8)
+                                                : sc_ui_color_rgba(0x24, 0x56,
+                                                                   0xB8, 0xB8);
+    demo->primary_button.style.fill_pressed_color = demo->primary_toggled
+                                                  ? sc_ui_color_rgba(0x24, 0x8E,
+                                                                     0xD8, 0xB8)
+                                                  : sc_ui_color_rgba(0x24, 0x56,
+                                                                     0xD8, 0xB8);
 
-    bool ok = sc_ui_draw_fill_rect(render_ctx, &rect,
-                                   sc_ui_color_rgba(r, g, b, a));
-    ok &= sc_ui_draw_rect_border(render_ctx, &rect,
-                                 sc_ui_color_rgba(0xFF, 0xFF, 0xFF,
-                                                  demo->button.pressed
-                                                      ? 0xFF
-                                                      : 0xD0));
-    struct sc_ui_text_style text_style = {
-        .color = sc_ui_color_rgba(0xFF, 0xFF, 0xFF, 0xE0),
-        .scale = 2,
-        .tracking = 2,
-    };
-    ok &= sc_ui_text_draw_in_rect(render_ctx, &rect, "DEMO", &text_style,
-                                  SC_UI_TEXT_ALIGN_CENTER);
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+    demo->secondary_button.style.fill_color = demo->secondary_toggled
+                                            ? sc_ui_color_rgba(0x7A, 0x58, 0x24,
+                                                               0xB8)
+                                            : sc_ui_color_rgba(0x6A, 0x44, 0x24,
+                                                               0xB8);
+    demo->secondary_button.style.fill_hover_color = demo->secondary_toggled
+                                                  ? sc_ui_color_rgba(0xA0, 0x70,
+                                                                     0x24, 0xB8)
+                                                  : sc_ui_color_rgba(0x90, 0x58,
+                                                                     0x24, 0xB8);
+    demo->secondary_button.style.fill_pressed_color = demo->secondary_toggled
+                                                    ? sc_ui_color_rgba(0xC0, 0x84,
+                                                                       0x24, 0xB8)
+                                                    : sc_ui_color_rgba(0xB0, 0x68,
+                                                                       0x24, 0xB8);
+
+    bool ok = sc_ui_widget_button_render(&demo->primary_button, render_ctx);
+    ok &= sc_ui_widget_button_render(&demo->secondary_button, render_ctx);
     return ok;
 }
 
@@ -96,8 +124,10 @@ sc_ui_demo_layer_on_detach(struct sc_ui_layer *layer,
                            struct sc_ui_context *ui) {
     (void) ui;
     struct sc_ui_demo_layer *demo = layer->userdata;
-    demo->button.hovered = false;
-    demo->button.pressed = false;
+    demo->primary_button.state.hovered = false;
+    demo->primary_button.state.pressed = false;
+    demo->secondary_button.state.hovered = false;
+    demo->secondary_button.state.pressed = false;
 }
 
 void
@@ -116,6 +146,38 @@ sc_ui_demo_layer_init(struct sc_ui_demo_layer *demo) {
         .z_index = 0,
         .userdata = demo,
     };
-    sc_ui_button_init(&demo->button, sc_ui_id_from_u32(demo, 1));
-    demo->toggled = false;
+
+    SDL_Rect rect = {
+        .x = 0,
+        .y = 0,
+        .w = SC_UI_DEMO_WIDTH,
+        .h = SC_UI_DEMO_HEIGHT,
+    };
+    struct sc_ui_widget_button_style style = {
+        .fill_color = sc_ui_color_rgba(0x24, 0x56, 0x78, 0xB8),
+        .fill_hover_color = sc_ui_color_rgba(0x24, 0x56, 0xB8, 0xB8),
+        .fill_pressed_color = sc_ui_color_rgba(0x24, 0x56, 0xD8, 0xB8),
+        .border_color = sc_ui_color_rgba(0xFF, 0xFF, 0xFF, 0xD0),
+        .border_pressed_color = sc_ui_color_rgba(0xFF, 0xFF, 0xFF, 0xFF),
+        .text_style = {
+            .color = sc_ui_color_rgba(0xFF, 0xFF, 0xFF, 0xE0),
+            .scale = 2,
+            .tracking = 2,
+        },
+    };
+    sc_ui_widget_button_init(&demo->primary_button, sc_ui_id_from_u32(demo, 1),
+                             &rect, "DEMO", &style);
+
+    struct sc_ui_widget_button_style secondary_style = style;
+    secondary_style.fill_color = sc_ui_color_rgba(0x6A, 0x44, 0x24, 0xB8);
+    secondary_style.fill_hover_color = sc_ui_color_rgba(0x90, 0x58, 0x24,
+                                                        0xB8);
+    secondary_style.fill_pressed_color = sc_ui_color_rgba(0xB0, 0x68, 0x24,
+                                                          0xB8);
+    sc_ui_widget_button_init(&demo->secondary_button,
+                             sc_ui_id_from_u32(demo, 2), &rect, "PING",
+                             &secondary_style);
+
+    demo->primary_toggled = false;
+    demo->secondary_toggled = false;
 }

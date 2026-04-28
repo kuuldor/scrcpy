@@ -44,6 +44,7 @@ src = [
     'src/ui/ui_demo_layer.c',
     'src/ui/ui_draw.c',
     'src/ui/ui_text.c',
+    'src/ui/ui_widget_button.c',
     'src/version.c',
     'src/hid/hid_gamepad.c',
     'src/hid/hid_keyboard.c',
