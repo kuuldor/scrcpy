@@ -83,8 +83,12 @@ sc_touchmap_editor_apply_drag(struct sc_touchmap_editor *editor,
 
 bool
 sc_touchmap_editor_nudge_selection(struct sc_touchmap_editor *editor,
-                                   struct sc_gptm_gamepad_touchmap *map,
-                                   int32_t dx, int32_t dy,
-                                   int32_t radius_delta);
+                                 struct sc_gptm_gamepad_touchmap *map,
+                                 int32_t dx, int32_t dy,
+                                 int32_t radius_delta);
+
+bool
+sc_touchmap_editor_delete_selected(struct sc_touchmap_editor *editor,
+                                 struct sc_gptm_gamepad_touchmap **map);
 
 #endif

@@ -4,6 +4,7 @@
 
 #include <SDL2/SDL.h>
 
+#include "input_manager.h"
 #include "ui/ui_draw.h"
 #include "ui/ui_context.h"
 #include "ui/ui_geom.h"
@@ -701,12 +702,109 @@ sc_ui_touchmap_layer_get_edit_label(const struct sc_touchmap_state *state) {
 }
 
 static void
+sc_ui_touchmap_layer_mark_edited(struct sc_ui_touchmap_layer *tm,
+                                 struct sc_ui_input_result *result) {
+    tm->touchmap_state->dirty = true;
+    tm->touchmap_state->exit_after_save = false;
+    result->request_refresh = true;
+}
+
+static bool
+sc_ui_touchmap_layer_selection_is_walk(
+        const struct sc_ui_touchmap_layer *tm) {
+    const struct sc_touchmap_state *state = tm->touchmap_state;
+    if (!state->map || !state->map->has_walk) {
+        return false;
+    }
+
+    struct sc_touchmap_editor_selection selection = state->editor.selection;
+    return selection.target == SC_TOUCHMAP_EDITOR_TARGET_WALK_CENTER
+        || selection.target == SC_TOUCHMAP_EDITOR_TARGET_WALK_RADIUS;
+}
+
+static bool
+sc_ui_touchmap_layer_selection_is_button(
+        const struct sc_ui_touchmap_layer *tm) {
+    const struct sc_touchmap_state *state = tm->touchmap_state;
+    if (!state->map) {
+        return false;
+    }
+
+    struct sc_touchmap_editor_selection selection = state->editor.selection;
+    return (selection.target == SC_TOUCHMAP_EDITOR_TARGET_BUTTON_CENTER
+            || selection.target == SC_TOUCHMAP_EDITOR_TARGET_BUTTON_RADIUS)
+        && selection.button_index >= 0
+        && selection.button_index < state->map->button_cnt;
+}
+
+static bool
+sc_ui_touchmap_layer_delete_selected_control(
+        struct sc_ui_touchmap_layer *tm,
+        struct sc_ui_input_result *result) {
+    struct sc_touchmap_state *state = tm->touchmap_state;
+    struct sc_gptm_gamepad_touchmap *map = state->map;
+    if (!map) {
+        return true;
+    }
+
+    if (sc_ui_touchmap_layer_selection_is_walk(tm)) {
+        if (sc_gptm_gamepad_touchmap_remove_walk(map)) {
+            sc_touchmap_editor_clear_selection(&state->editor);
+            sc_ui_touchmap_layer_mark_edited(tm, result);
+        }
+        return true;
+    }
+
+    if (sc_ui_touchmap_layer_selection_is_button(tm)) {
+        int old_index = state->editor.selection.button_index;
+        int new_index = -1;
+        map = sc_gptm_gamepad_touchmap_remove_button(map, old_index,
+                                                     &new_index);
+        if (map) {
+            state->map = map;
+            sc_touchmap_editor_select_after_button_remove(&state->editor, map,
+                                                          new_index);
+            sc_ui_touchmap_layer_mark_edited(tm, result);
+        }
+        return true;
+    }
+
+    return true;
+}
+
+static bool
+sc_ui_touchmap_layer_capture_binding(struct sc_ui_touchmap_layer *tm,
+                                     uint8_t button,
+                                     struct sc_ui_input_result *result) {
+    struct sc_touchmap_state *state = tm->touchmap_state;
+    if (!state->map || !state->edit_mode
+            || sc_touchmap_editor_get_mode(&state->editor)
+                != SC_TOUCHMAP_EDITOR_MODE_SELECT
+            || !sc_ui_touchmap_layer_selection_is_button(tm)) {
+        return false;
+    }
+
+    int index = state->editor.selection.button_index;
+    int new_index = -1;
+    if (sc_gptm_gamepad_touchmap_bind_button(state->map, index, button,
+                                             &new_index)) {
+        sc_touchmap_editor_select_button(&state->editor, new_index);
+        sc_ui_touchmap_layer_mark_edited(tm, result);
+        return true;
+    }
+
+    return false;
+}
+
+static void
 sc_ui_touchmap_layer_action_edit(void *userdata,
                                  struct sc_ui_input_result *result) {
     struct sc_ui_touchmap_layer *tm = userdata;
-    tm->touchmap_state->pending_control = !tm->touchmap_state->map
-        ? SC_TOUCHMAP_OVERLAY_CONTROL_NEW
-        : SC_TOUCHMAP_OVERLAY_CONTROL_EDIT;
+    if (!tm->touchmap_state->map) {
+        sc_touchmap_state_create_empty(tm->touchmap_state);
+    } else {
+        sc_touchmap_state_enter_edit_mode(tm->touchmap_state);
+    }
     result->request_refresh = true;
 }
 
@@ -722,15 +820,14 @@ static void
 sc_ui_touchmap_layer_action_delete(void *userdata,
                                    struct sc_ui_input_result *result) {
     struct sc_ui_touchmap_layer *tm = userdata;
-    tm->touchmap_state->pending_control = SC_TOUCHMAP_OVERLAY_CONTROL_DEL;
-    result->request_refresh = true;
+    sc_ui_touchmap_layer_delete_selected_control(tm, result);
 }
 
 static void
 sc_ui_touchmap_layer_action_quit(void *userdata,
                                  struct sc_ui_input_result *result) {
     struct sc_ui_touchmap_layer *tm = userdata;
-    tm->touchmap_state->pending_control = SC_TOUCHMAP_OVERLAY_CONTROL_QUIT;
+    sc_touchmap_state_quit_edit_mode(tm->touchmap_state);
     result->request_refresh = true;
 }
 
@@ -738,8 +835,8 @@ static void
 sc_ui_touchmap_layer_action_add_button(void *userdata,
                                        struct sc_ui_input_result *result) {
     struct sc_ui_touchmap_layer *tm = userdata;
-    tm->touchmap_state->pending_control = SC_TOUCHMAP_OVERLAY_CONTROL_ADD_BUTTON;
     tm->touchmap_state->add_menu_open = false;
+    sc_touchmap_state_add_button_at_center(tm->touchmap_state, false);
     result->request_refresh = true;
 }
 
@@ -747,8 +844,8 @@ static void
 sc_ui_touchmap_layer_action_add_skill(void *userdata,
                                       struct sc_ui_input_result *result) {
     struct sc_ui_touchmap_layer *tm = userdata;
-    tm->touchmap_state->pending_control = SC_TOUCHMAP_OVERLAY_CONTROL_ADD_SKILL;
     tm->touchmap_state->add_menu_open = false;
+    sc_touchmap_state_add_button_at_center(tm->touchmap_state, true);
     result->request_refresh = true;
 }
 
@@ -756,8 +853,8 @@ static void
 sc_ui_touchmap_layer_action_add_walk(void *userdata,
                                      struct sc_ui_input_result *result) {
     struct sc_ui_touchmap_layer *tm = userdata;
-    tm->touchmap_state->pending_control = SC_TOUCHMAP_OVERLAY_CONTROL_ADD_WALK;
     tm->touchmap_state->add_menu_open = false;
+    sc_touchmap_state_add_walk_at_center(tm->touchmap_state);
     result->request_refresh = true;
 }
 
@@ -817,6 +914,173 @@ sc_ui_touchmap_layer_sync(struct sc_ui_layer *layer, struct sc_ui_context *ui) {
     sc_ui_touchmap_layer_sync_layout(tm, geometry);
 }
 
+static bool
+sc_ui_touchmap_layer_handle_edit_key(struct sc_ui_touchmap_layer *tm,
+                                     const struct sc_ui_event *event,
+                                     struct sc_ui_input_result *result) {
+    const struct sc_touchmap_state *state = tm->touchmap_state;
+    SDL_Keycode keycode = event->data.key.keycode;
+    uint16_t mod = event->data.key.mod;
+
+    if (keycode == SDLK_s && sc_touchmap_has_ctrl_modifier()
+            && event->type == SC_UI_EVENT_KEY_DOWN
+            && !event->data.key.repeat && state->map) {
+        sc_touchmap_state_save(tm->touchmap_state,
+                               (mod & KMOD_SHIFT) || !state->file);
+        result->request_refresh = true;
+        return true;
+    }
+
+    if (!state->edit_mode) {
+        return false;
+    }
+
+    if (keycode == SDLK_ESCAPE) {
+        bool pending = sc_touchmap_editor_get_mode(&state->editor)
+                    != SC_TOUCHMAP_EDITOR_MODE_SELECT
+                    || state->add_menu_open;
+        if (!pending) {
+            return false;
+        }
+
+        if (event->type == SC_UI_EVENT_KEY_DOWN && !event->data.key.repeat) {
+            sc_touchmap_editor_set_mode(&tm->touchmap_state->editor,
+                                        SC_TOUCHMAP_EDITOR_MODE_SELECT);
+            tm->touchmap_state->add_menu_open = false;
+            result->request_refresh = true;
+        }
+        return true;
+    }
+
+    if (keycode != SDLK_LEFT && keycode != SDLK_RIGHT && keycode != SDLK_UP
+            && keycode != SDLK_DOWN) {
+        return false;
+    }
+
+    if (mod & (KMOD_CTRL | KMOD_ALT | KMOD_GUI)) {
+        return false;
+    }
+
+    if (event->type != SC_UI_EVENT_KEY_DOWN) {
+        return true;
+    }
+
+    int32_t step = mod & KMOD_SHIFT ? 10 : 1;
+    int32_t dx = 0;
+    int32_t dy = 0;
+    int32_t radius_delta = 0;
+    switch (keycode) {
+        case SDLK_LEFT:
+            dx = -step;
+            radius_delta = -step;
+            break;
+        case SDLK_RIGHT:
+            dx = step;
+            radius_delta = step;
+            break;
+        case SDLK_UP:
+            dy = -step;
+            radius_delta = step;
+            break;
+        case SDLK_DOWN:
+            dy = step;
+            radius_delta = -step;
+            break;
+        default:
+            assert(false);
+            return true;
+    }
+
+    if (sc_touchmap_editor_nudge_selection(&tm->touchmap_state->editor,
+                                           tm->touchmap_state->map, dx, dy,
+                                           radius_delta)) {
+        sc_ui_touchmap_layer_mark_edited(tm, result);
+    }
+    return true;
+}
+
+static bool
+sc_ui_touchmap_layer_handle_gamepad_event(
+        struct sc_ui_touchmap_layer *tm,
+        const struct sc_ui_event *event,
+        struct sc_ui_input_result *result) {
+    if (!tm->touchmap_state->edit_mode) {
+        return false;
+    }
+
+    if (event->type == SC_UI_EVENT_GAMEPAD_BUTTON_DOWN
+            && event->data.gamepad_button.pressed) {
+        return sc_ui_touchmap_layer_capture_binding(
+            tm, event->data.gamepad_button.button, result);
+    }
+
+    if (event->type == SC_UI_EVENT_GAMEPAD_AXIS
+            && (event->data.gamepad_axis.axis == SDL_CONTROLLER_AXIS_TRIGGERLEFT
+                || event->data.gamepad_axis.axis
+                    == SDL_CONTROLLER_AXIS_TRIGGERRIGHT)
+            && event->data.gamepad_axis.value > SDL_MAX_SINT16 / 2) {
+        return sc_ui_touchmap_layer_capture_binding(
+            tm, SDL_CONTROLLER_BUTTON_MAX + event->data.gamepad_axis.axis,
+            result);
+    }
+
+    return false;
+}
+
+static struct sc_ui_input_result
+sc_ui_touchmap_layer_handle_edit_pointer(
+        struct sc_ui_touchmap_layer *tm,
+        const struct sc_ui_event *event) {
+    struct sc_ui_input_result result = {.consumed = true, .request_refresh = false};
+    if (event->type == SC_UI_EVENT_POINTER_WHEEL) {
+        return result;
+    }
+
+    if (event->type == SC_UI_EVENT_POINTER_MOVE) {
+        if (sc_touchmap_editor_is_dragging(&tm->touchmap_state->editor)
+                && sc_touchmap_editor_apply_drag(&tm->touchmap_state->editor,
+                                                 tm->touchmap_state->map,
+                                                 (struct sc_point) {
+                                                     .x = event->data.pointer.x,
+                                                     .y = event->data.pointer.y,
+                                                 })) {
+            sc_ui_touchmap_layer_mark_edited(tm, &result);
+        }
+        return result;
+    }
+
+    if (event->data.pointer.button != SDL_BUTTON_LEFT) {
+        return result;
+    }
+
+    if (event->type == SC_UI_EVENT_POINTER_UP) {
+        if (sc_touchmap_editor_is_dragging(&tm->touchmap_state->editor)) {
+            sc_touchmap_editor_reset_drag(&tm->touchmap_state->editor);
+            result.request_refresh = true;
+        }
+        return result;
+    }
+
+    assert(event->type == SC_UI_EVENT_POINTER_DOWN);
+    struct sc_point point = {
+        .x = event->data.pointer.x,
+        .y = event->data.pointer.y,
+    };
+    if (sc_touchmap_editor_get_mode(&tm->touchmap_state->editor)
+            == SC_TOUCHMAP_EDITOR_MODE_ADD_MENU) {
+        sc_touchmap_editor_set_mode(&tm->touchmap_state->editor,
+                                    SC_TOUCHMAP_EDITOR_MODE_SELECT);
+        tm->touchmap_state->add_menu_open = false;
+        result.request_refresh = true;
+        return result;
+    }
+
+    sc_touchmap_editor_try_start_drag(&tm->touchmap_state->editor,
+                                      tm->touchmap_state->map, point);
+    result.request_refresh = true;
+    return result;
+}
+
 static struct sc_ui_input_result
 sc_ui_touchmap_layer_handle_event(struct sc_ui_layer *layer,
                                   struct sc_ui_context *ui,
@@ -830,7 +1094,24 @@ sc_ui_touchmap_layer_handle_event(struct sc_ui_layer *layer,
         return result;
     }
 
-    if (state->edit_mode) {
+    if (event->type == SC_UI_EVENT_KEY_DOWN || event->type == SC_UI_EVENT_KEY_UP) {
+        result.consumed = sc_ui_touchmap_layer_handle_edit_key(tm, event,
+                                                                &result);
+        return result;
+    }
+
+    if (event->type == SC_UI_EVENT_GAMEPAD_AXIS
+            || event->type == SC_UI_EVENT_GAMEPAD_BUTTON_DOWN
+            || event->type == SC_UI_EVENT_GAMEPAD_BUTTON_UP) {
+        result.consumed = sc_ui_touchmap_layer_handle_gamepad_event(tm, event,
+                                                                     &result);
+        return result;
+    }
+
+    if (state->edit_mode && (event->type == SC_UI_EVENT_POINTER_DOWN
+                             || event->type == SC_UI_EVENT_POINTER_UP
+                             || event->type == SC_UI_EVENT_POINTER_MOVE
+                             || event->type == SC_UI_EVENT_POINTER_WHEEL)) {
         struct sc_ui_widget_action_menu_result menu_result =
             sc_ui_widget_action_menu_handle_event(&tm->action_menu, ui, layer,
                                                   event,
@@ -840,7 +1121,14 @@ sc_ui_touchmap_layer_handle_event(struct sc_ui_layer *layer,
             tm->touchmap_state->add_menu_open = false;
             result.request_refresh = true;
         }
-    } else {
+        if (result.consumed) {
+            return result;
+        }
+
+        return sc_ui_touchmap_layer_handle_edit_pointer(tm, event);
+    }
+
+    if (!state->edit_mode) {
         result = sc_ui_widget_action_button_handle_event(&tm->edit_button, ui,
                                                          layer, event);
     }
@@ -872,6 +1160,7 @@ sc_ui_touchmap_layer_render(struct sc_ui_layer *layer,
 
 void
 sc_ui_touchmap_layer_init(struct sc_ui_touchmap_layer *layer,
+                          struct sc_input_manager *input_manager,
                           struct sc_touchmap_state *touchmap_state) {
     static const struct sc_ui_layer_ops ops = {
         .sync = sc_ui_touchmap_layer_sync,
@@ -880,6 +1169,7 @@ sc_ui_touchmap_layer_init(struct sc_ui_touchmap_layer *layer,
         .on_detach = NULL,
     };
 
+    layer->input_manager = input_manager;
     layer->touchmap_state = touchmap_state;
     layer->layer = (struct sc_ui_layer) {
         .ops = &ops,

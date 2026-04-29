@@ -8,20 +8,12 @@
 #include "touchmap/touchmap.h"
 #include "touchmap/touchmap_editor.h"
 #include "touchmap/touchmap_loader.h"
+#include "util/file.h"
 
-enum sc_touchmap_overlay_control {
-    SC_TOUCHMAP_OVERLAY_CONTROL_NONE,
-    SC_TOUCHMAP_OVERLAY_CONTROL_NEW,
-    SC_TOUCHMAP_OVERLAY_CONTROL_EDIT,
-    SC_TOUCHMAP_OVERLAY_CONTROL_ADD,
-    SC_TOUCHMAP_OVERLAY_CONTROL_DEL,
-    SC_TOUCHMAP_OVERLAY_CONTROL_QUIT,
-    SC_TOUCHMAP_OVERLAY_CONTROL_ADD_BUTTON,
-    SC_TOUCHMAP_OVERLAY_CONTROL_ADD_SKILL,
-    SC_TOUCHMAP_OVERLAY_CONTROL_ADD_WALK,
-};
+struct sc_screen;
 
 struct sc_touchmap_state {
+    struct sc_screen *screen;
     struct sc_gptm_gamepad_touchmap *map;
     char *file;
     const char *dir;
@@ -31,8 +23,6 @@ struct sc_touchmap_state {
     bool overlay_enabled;
     bool edit_mode;
     bool add_menu_open;
-
-    enum sc_touchmap_overlay_control pending_control;
 
     bool dirty;
     bool exit_after_save;
@@ -62,7 +52,8 @@ struct sc_touchmap_switch_decision {
 
 bool
 sc_touchmap_state_init(struct sc_touchmap_state *touchmap,
-                       const char *dir, bool auto_enabled);
+                     struct sc_screen *screen,
+                     const char *dir, bool auto_enabled);
 
 void
 sc_touchmap_state_destroy(struct sc_touchmap_state *touchmap);
@@ -93,5 +84,103 @@ struct sc_touchmap_switch_decision
 sc_touchmap_switch_decide_apply_deferred(
         const struct sc_touchmap_state *state,
         const char *resolved_file);
+
+void
+sc_touchmap_state_mark_dirty(struct sc_touchmap_state *touchmap);
+
+void
+sc_touchmap_state_request_refresh(struct sc_touchmap_state *touchmap);
+
+void
+sc_touchmap_state_free_up(struct sc_touchmap_state *touchmap);
+
+void
+sc_touchmap_state_set_manual_override(struct sc_touchmap_state *touchmap,
+                                     bool enabled);
+
+bool
+sc_touchmap_state_set_deferred_switch(struct sc_touchmap_state *touchmap,
+                                      const char *package_name,
+                                      const char *touchmap_file);
+
+bool
+sc_touchmap_state_reload_file(struct sc_touchmap_state *touchmap);
+
+void
+sc_touchmap_state_maybe_apply_deferred_switch(struct sc_touchmap_state *touchmap);
+
+void
+sc_touchmap_state_free_up(struct sc_touchmap_state *touchmap);
+
+void
+sc_touchmap_state_set_manual_override(struct sc_touchmap_state *touchmap,
+                                   bool enabled);
+
+bool
+sc_touchmap_state_apply_auto_target(struct sc_touchmap_state *touchmap,
+                           const char *package_name,
+                           const char *touchmap_file);
+
+char *
+sc_touchmap_state_build_save_dialog_default_path(
+    const struct sc_touchmap_state *touchmap);
+
+bool
+sc_touchmap_state_load_manual_file(struct sc_touchmap_state *touchmap,
+                                    const char *touchmap_file);
+
+bool
+sc_touchmap_state_load_auto_file(struct sc_touchmap_state *touchmap,
+                                     const char *touchmap_file);
+
+bool
+sc_touchmap_state_edit_mode_active(const struct sc_touchmap_state *touchmap);
+
+bool
+sc_touchmap_state_selection_is_button(const struct sc_touchmap_state *touchmap);
+
+bool
+sc_touchmap_state_selection_is_walk(const struct sc_touchmap_state *touchmap);
+
+bool
+sc_touchmap_state_apply_loaded_map(struct sc_touchmap_state *touchmap,
+                                  struct sc_gptm_gamepad_touchmap *map,
+                                  const char *touchmap_file);
+
+bool
+sc_touchmap_state_load_file(struct sc_touchmap_state *touchmap,
+                           const char *touchmap_file);
+
+bool
+sc_touchmap_state_replace_string(char **dst, const char *src);
+
+void
+sc_touchmap_state_create_empty(struct sc_touchmap_state *touchmap);
+
+void
+sc_touchmap_state_enter_edit_mode(struct sc_touchmap_state *touchmap);
+
+bool
+sc_touchmap_state_add_button_at_center(struct sc_touchmap_state *touchmap,
+                                       bool skill);
+
+bool
+sc_touchmap_state_add_walk_at_center(struct sc_touchmap_state *touchmap);
+
+void
+sc_touchmap_state_quit_edit_mode(struct sc_touchmap_state *touchmap);
+
+void
+sc_touchmap_state_save(struct sc_touchmap_state *touchmap, bool save_as);
+
+void
+sc_touchmap_state_save_to_file(struct sc_touchmap_state *touchmap,
+                               const char *filename);
+
+bool
+sc_touchmap_has_ctrl_modifier(void);
+
+void
+sc_touchmap_state_resume_auto_mode(struct sc_touchmap_state *touchmap);
 
 #endif

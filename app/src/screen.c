@@ -463,7 +463,8 @@ sc_screen_init(struct sc_screen *screen,
         }
     }
 
-    sc_ui_touchmap_layer_init(&screen->ui_touchmap, &screen->im.touchmap);
+    sc_ui_touchmap_layer_init(&screen->ui_touchmap, &screen->im,
+                              &screen->im.touchmap);
     if (!sc_ui_context_add_layer(&screen->ui, &screen->ui_touchmap.layer, 10)) {
         LOGW("Failed to add UI touchmap layer");
     }
@@ -767,6 +768,24 @@ sc_screen_handle_ui_event(struct sc_screen *screen, const SDL_Event *event) {
                 .repeat = event->key.repeat,
             };
             break;
+        case SDL_CONTROLLERAXISMOTION:
+            ui_event.type = SC_UI_EVENT_GAMEPAD_AXIS;
+            ui_event.data.gamepad_axis = (struct sc_ui_gamepad_axis_event) {
+                .axis = event->caxis.axis,
+                .value = event->caxis.value,
+            };
+            break;
+        case SDL_CONTROLLERBUTTONDOWN:
+        case SDL_CONTROLLERBUTTONUP:
+            ui_event.type = event->type == SDL_CONTROLLERBUTTONDOWN
+                          ? SC_UI_EVENT_GAMEPAD_BUTTON_DOWN
+                          : SC_UI_EVENT_GAMEPAD_BUTTON_UP;
+            ui_event.data.gamepad_button =
+                (struct sc_ui_gamepad_button_event) {
+                    .button = event->cbutton.button,
+                    .pressed = event->cbutton.state == SDL_PRESSED,
+                };
+            break;
         case SDL_MOUSEMOTION: {
             int32_t x = event->motion.x;
             int32_t y = event->motion.y;
@@ -838,8 +857,6 @@ sc_screen_handle_ui_event(struct sc_screen *screen, const SDL_Event *event) {
     if (result.request_refresh && screen->video && screen->has_frame) {
         sc_push_event(SC_EVENT_SCREEN_REFRESH);
     }
-
-    sc_input_manager_process_pending_touchmap_control(&screen->im);
 
     return result.consumed;
 }

@@ -81,12 +81,5 @@ sc_input_manager_destroy(struct sc_input_manager *im);
 void sc_input_manager_handle_event(struct sc_input_manager *im,
                                     const SDL_Event *event);
 
-void
-sc_input_manager_process_pending_touchmap_control(
-    struct sc_input_manager *im);
-
-bool sc_touchmap_drag_is_active(const struct sc_input_manager *im);
-bool sc_touchmap_has_ctrl_modifier(void);
-
 
 #endif

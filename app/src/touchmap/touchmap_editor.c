@@ -334,10 +334,43 @@ sc_touchmap_editor_nudge_selection(struct sc_touchmap_editor *editor,
             if (radius == btn->radius) {
                 return false;
             }
-            btn->radius = radius;
+btn->radius = radius;
             return true;
         }
+
         default:
             return false;
     }
+}
+
+bool
+sc_touchmap_editor_delete_selected(struct sc_touchmap_editor *editor,
+                                    struct sc_gptm_gamepad_touchmap **map) {
+    struct sc_touchmap_editor_selection selection = editor->selection;
+    if (!*map) {
+        return false;
+    }
+
+    if (selection.target == SC_TOUCHMAP_EDITOR_TARGET_WALK_CENTER
+            || selection.target == SC_TOUCHMAP_EDITOR_TARGET_WALK_RADIUS) {
+        if (sc_gptm_gamepad_touchmap_remove_walk(*map)) {
+            sc_touchmap_editor_clear_selection(editor);
+        }
+        return true;
+    }
+
+    if (selection.target == SC_TOUCHMAP_EDITOR_TARGET_BUTTON_CENTER
+            || selection.target == SC_TOUCHMAP_EDITOR_TARGET_BUTTON_RADIUS) {
+        int old_index = selection.button_index;
+        int new_index = -1;
+        struct sc_gptm_gamepad_touchmap *new_map =
+            sc_gptm_gamepad_touchmap_remove_button(*map, old_index, &new_index);
+        if (new_map) {
+            *map = new_map;
+            sc_touchmap_editor_select_after_button_remove(editor, new_map, new_index);
+        }
+        return true;
+    }
+
+    return true;
 }
