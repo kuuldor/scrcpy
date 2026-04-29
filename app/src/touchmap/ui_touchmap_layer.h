@@ -5,10 +5,11 @@
 
 #include <stdbool.h>
 
+#include <SDL2/SDL_rect.h>
+
 #include "ui/ui_layer.h"
 #include "ui/ui_widget_action_button.h"
 #include "ui/ui_widget_action_menu.h"
-#include "touchmap/touchmap_overlay.h"
 #include "touchmap/touchmap_state.h"
 
 struct sc_ui_touchmap_layer {

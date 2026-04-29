@@ -175,14 +175,6 @@ sc_touchmap_editor_try_start_drag(struct sc_touchmap_editor *editor,
                                           i);
             return true;
         }
-
-        if (sc_touchmap_editor_hit_test_radius(&btn->center, radius, point,
-                                               radius_threshold)) {
-            sc_touchmap_editor_start_drag(editor,
-                                          SC_TOUCHMAP_EDITOR_TARGET_BUTTON_RADIUS,
-                                          i);
-            return true;
-        }
     }
 
     return false;
