@@ -11,30 +11,11 @@
 #include "input_events.h"
 #include "screen.h"
 #include "shortcut_mod.h"
-#include "util/file.h"
 #include "util/log.h"
 
 #include "touchmap/touchmap.h"
 #include "touchmap/touchmap_overlay.h"
-#include "third_party/tfd/tinyfiledialogs.h"
 #include "events.h"
-
-static void sc_start_thread(const char *name, SDL_ThreadFunction fn, void *data);
-
-
-
-static bool
-sc_input_manager_replace_string(char **dst, const char *src) {
-    char *copy = src ? SDL_strdup(src) : NULL;
-    if (src && !copy) {
-        LOG_OOM();
-        return false;
-    }
-
-    SDL_free(*dst);
-    *dst = copy;
-    return true;
-}
 
 bool
 sc_input_manager_init(struct sc_input_manager *im,
@@ -433,40 +414,6 @@ inverse_point(struct sc_point point, struct sc_size size,
     return point;
 }
 
-static int open_file_dialog_thread(void *data) {
-    struct sc_input_manager *im = (struct sc_input_manager *)data;
-    (void)im;
-
-    char const * lFilterPatterns[2] = {"*.json", "*.*"};
-    char * file_name = tinyfd_openFileDialog(
-        "Open Touch Map File",
-        "",
-        2,
-        lFilterPatterns,
-        "JSON file",
-        0
-    );
-
-    if (file_name == NULL) {
-        LOGI("Open File cancelled");
-        return 1;
-    }
-
-    LOGI("Selected file: %s", file_name);
-
-    // Send custom event to notify the main thread
-    SDL_Event event;
-    event.type = SC_EVENT_FILE_DIALOG;
-    event.user.code = 0;
-
-    int len = SDL_strlen(file_name) + 1;
-    event.user.data1 = SDL_malloc(len);
-    SDL_strlcpy(event.user.data1, file_name, len);
-    SDL_PushEvent(&event);
-
-    return 0;
-}
-
 static void sc_start_thread(const char * name, SDL_ThreadFunction fn, void *data) {
     SDL_Thread *thread = SDL_CreateThread(fn, name, data);
     if (!thread) {
@@ -474,13 +421,6 @@ static void sc_start_thread(const char * name, SDL_ThreadFunction fn, void *data
     } else {
         SDL_DetachThread(thread);
     }
-}
-
-static void
-open_touchmap_file(struct sc_input_manager *im) {
-    assert(im->controller);
-
-    sc_start_thread("FileDialogThread", open_file_dialog_thread, im);
 }
 
 static void
@@ -676,8 +616,7 @@ sc_input_manager_process_key(struct sc_input_manager *im,
                         sc_touchmap_state_free_up(&im->touchmap);
                         sc_touchmap_state_resume_auto_mode(&im->touchmap);
                     } else {
-                        // Show OpenFileDialog to select TouchMap file
-                        open_touchmap_file(im);
+                        sc_touchmap_state_open_file_dialog(&im->touchmap);
                     }
                 }
                 return;
@@ -1455,27 +1394,16 @@ sc_input_manager_handle_event(struct sc_input_manager *im,
         }
         case SC_EVENT_FILE_DIALOG: {
             const char * file_name = event->user.data1;
-            if (file_name == NULL) {
-                break;
-            }
-            LOGI("Got FILE OPEN Event with file name: %s", file_name);
-
-            sc_touchmap_state_load_manual_file(&im->touchmap, file_name);
+            sc_touchmap_state_handle_open_dialog_result(&im->touchmap,
+                                                        file_name);
             SDL_free((void*)file_name);
             break;
         }
         case SC_EVENT_TOUCHMAP_SAVE: {
             const char * file_name = event->user.data1;
-            if (event->user.code == 1) {
-                im->touchmap.exit_after_save = false;
-                break;
-            }
-            if (file_name == NULL) {
-                break;
-            }
-            LOGI("Got TOUCHMAP SAVE Event with file name: %s", file_name);
-
-            sc_touchmap_state_save_to_file(&im->touchmap, file_name);
+            sc_touchmap_state_handle_save_dialog_result(&im->touchmap,
+                                                        event->user.code == 1,
+                                                        file_name);
             SDL_free((void*)file_name);
             break;
         }
@@ -1488,31 +1416,8 @@ sc_input_manager_handle_event(struct sc_input_manager *im,
                      package_name ? package_name : "(none)");
             }
 
-            sc_input_manager_replace_string(&im->touchmap.current_package,
-                                            package_name);
-            if (im->touchmap.auto_enabled && !im->touchmap.manual_override) {
-                const char *touchmap_file =
-                    sc_touchmap_loader_find_path(&im->touchmap.loader,
-                                                 package_name);
-                struct sc_touchmap_switch_decision decision =
-                    sc_touchmap_switch_decide_foreground_change(
-                        &im->touchmap, package_name, touchmap_file);
-                LOGI("Foreground package %s resolved to %s",
-                     package_name ? package_name : "(none)",
-                     touchmap_file ? touchmap_file : "(no touchmap)");
-                if (decision.action == SC_TOUCHMAP_SWITCH_ACTION_DEFER) {
-                    if (sc_touchmap_state_set_deferred_switch(&im->touchmap,
-                                                        decision.package_name,
-                                                        decision.touchmap_file)) {
-                        LOGI("Deferring auto touchmap switch for %s",
-                             package_name ? package_name : "(none)");
-                    }
-                } else if (decision.action != SC_TOUCHMAP_SWITCH_ACTION_NONE
-                        && decision.action != SC_TOUCHMAP_SWITCH_ACTION_KEEP) {
-                    sc_touchmap_state_apply_auto_target(&im->touchmap, decision.package_name,
-                                              decision.touchmap_file);
-                }
-            }
+            sc_touchmap_state_on_foreground_app_changed(&im->touchmap,
+                                                        package_name);
             sc_fg_app_changed_event_destroy(payload);
             break;
         }

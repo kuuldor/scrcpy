@@ -109,17 +109,15 @@ sc_touchmap_state_reload_file(struct sc_touchmap_state *touchmap);
 void
 sc_touchmap_state_maybe_apply_deferred_switch(struct sc_touchmap_state *touchmap);
 
-void
-sc_touchmap_state_free_up(struct sc_touchmap_state *touchmap);
-
-void
-sc_touchmap_state_set_manual_override(struct sc_touchmap_state *touchmap,
-                                   bool enabled);
-
 bool
 sc_touchmap_state_apply_auto_target(struct sc_touchmap_state *touchmap,
-                           const char *package_name,
-                           const char *touchmap_file);
+                            const char *package_name,
+                            const char *touchmap_file);
+
+void
+sc_touchmap_state_on_foreground_app_changed(
+    struct sc_touchmap_state *touchmap,
+    const char *package_name);
 
 char *
 sc_touchmap_state_build_save_dialog_default_path(
@@ -174,8 +172,20 @@ void
 sc_touchmap_state_save(struct sc_touchmap_state *touchmap, bool save_as);
 
 void
+sc_touchmap_state_open_file_dialog(struct sc_touchmap_state *touchmap);
+
+void
+sc_touchmap_state_handle_open_dialog_result(struct sc_touchmap_state *touchmap,
+                                            const char *filename);
+
+void
 sc_touchmap_state_save_to_file(struct sc_touchmap_state *touchmap,
                                const char *filename);
+
+void
+sc_touchmap_state_handle_save_dialog_result(struct sc_touchmap_state *touchmap,
+                                            bool cancelled,
+                                            const char *filename);
 
 bool
 sc_touchmap_has_ctrl_modifier(void);

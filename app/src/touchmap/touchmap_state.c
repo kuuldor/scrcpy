@@ -455,6 +455,39 @@ save_touchmap_dialog_thread(void *data) {
     return 0;
 }
 
+static int
+open_file_dialog_thread(void *data) {
+    struct sc_touchmap_state *touchmap = data;
+    (void) touchmap;
+
+    char const *lFilterPatterns[2] = {"*.json", "*.*"};
+    char *file_name = tinyfd_openFileDialog(
+        "Open Touch Map File",
+        "",
+        2,
+        lFilterPatterns,
+        "JSON file",
+        0);
+
+    if (file_name == NULL) {
+        LOGI("Open File cancelled");
+        return 1;
+    }
+
+    LOGI("Selected file: %s", file_name);
+
+    SDL_Event event;
+    event.type = SC_EVENT_FILE_DIALOG;
+    event.user.code = 0;
+
+    int len = SDL_strlen(file_name) + 1;
+    event.user.data1 = SDL_malloc(len);
+    SDL_strlcpy(event.user.data1, file_name, len);
+    SDL_PushEvent(&event);
+
+    return 0;
+}
+
 void
 sc_touchmap_state_save_to_file(struct sc_touchmap_state *touchmap,
                                const char *filename) {
@@ -590,6 +623,40 @@ sc_touchmap_state_save(struct sc_touchmap_state *touchmap, bool save_as) {
     } else {
         sc_touchmap_state_save_to_file(touchmap, touchmap->file);
     }
+}
+
+void
+sc_touchmap_state_open_file_dialog(struct sc_touchmap_state *touchmap) {
+    sc_touchmap_start_thread("FileDialogThread", open_file_dialog_thread,
+                             touchmap);
+}
+
+void
+sc_touchmap_state_handle_open_dialog_result(struct sc_touchmap_state *touchmap,
+                                            const char *filename) {
+    if (!filename) {
+        return;
+    }
+
+    LOGI("Got FILE OPEN Event with file name: %s", filename);
+    sc_touchmap_state_load_manual_file(touchmap, filename);
+}
+
+void
+sc_touchmap_state_handle_save_dialog_result(struct sc_touchmap_state *touchmap,
+                                            bool cancelled,
+                                            const char *filename) {
+    if (cancelled) {
+        touchmap->exit_after_save = false;
+        return;
+    }
+
+    if (!filename) {
+        return;
+    }
+
+    LOGI("Got TOUCHMAP SAVE Event with file name: %s", filename);
+    sc_touchmap_state_save_to_file(touchmap, filename);
 }
 
 bool
@@ -813,6 +880,39 @@ sc_touchmap_state_apply_auto_target(struct sc_touchmap_state *touchmap,
 
     sc_touchmap_state_set_manual_override(touchmap, false);
     return true;
+}
+
+void
+sc_touchmap_state_on_foreground_app_changed(
+        struct sc_touchmap_state *touchmap,
+        const char *package_name) {
+    sc_touchmap_state_replace_string(&touchmap->current_package,
+                                     package_name);
+
+    if (!touchmap->auto_enabled || touchmap->manual_override) {
+        return;
+    }
+
+    const char *touchmap_file =
+        sc_touchmap_loader_find_path(&touchmap->loader, package_name);
+    struct sc_touchmap_switch_decision decision =
+        sc_touchmap_switch_decide_foreground_change(touchmap, package_name,
+                                                    touchmap_file);
+    LOGI("Foreground package %s resolved to %s",
+         package_name ? package_name : "(none)",
+         touchmap_file ? touchmap_file : "(no touchmap)");
+    if (decision.action == SC_TOUCHMAP_SWITCH_ACTION_DEFER) {
+        if (sc_touchmap_state_set_deferred_switch(touchmap,
+                                                  decision.package_name,
+                                                  decision.touchmap_file)) {
+            LOGI("Deferring auto touchmap switch for %s",
+                 package_name ? package_name : "(none)");
+        }
+    } else if (decision.action != SC_TOUCHMAP_SWITCH_ACTION_NONE
+            && decision.action != SC_TOUCHMAP_SWITCH_ACTION_KEEP) {
+        sc_touchmap_state_apply_auto_target(touchmap, decision.package_name,
+                                            decision.touchmap_file);
+    }
 }
 
 void
