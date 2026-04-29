@@ -55,8 +55,10 @@ sc_ui_widget_action_menu_init(struct sc_ui_widget_action_menu *action_menu,
     for (size_t i = 0; i < menu_button_count; ++i) {
         action_menu->menu_buttons[i] = menu_buttons[i];
         action_menu->menu_actions[i] = menu_actions[i];
+        action_menu->menu_button_slots[i] = (int) i;
     }
     action_menu->userdata = userdata;
+    action_menu->menu_layout_count = menu_button_count;
     action_menu->margin = 8;
     action_menu->padding = 6;
     action_menu->gap = 6;
@@ -105,7 +107,7 @@ sc_ui_widget_action_menu_layout_top_right(
     action_menu->menu.style.item_height = button_height;
     action_menu->menu.style.item_gap = action_menu->menu_gap;
     sc_ui_widget_menu_fit_panel(&action_menu->menu,
-                                (int) action_menu->menu_button_count);
+                                (int) action_menu->menu_layout_count);
     sc_ui_widget_menu_place_below(&action_menu->menu,
                                   &action_menu->toolbar_panel.rect,
                                   action_menu->menu_gap);
@@ -114,7 +116,7 @@ sc_ui_widget_action_menu_layout_top_right(
         struct sc_ui_widget_button *button = action_menu->menu_buttons[i];
         sc_ui_widget_button_set_size(button, button_width, button_height);
         button->rect = sc_ui_widget_menu_get_item_rect(&action_menu->menu,
-                                                       (int) i);
+                                                       action_menu->menu_button_slots[i]);
     }
 }
 
@@ -148,6 +150,19 @@ sc_ui_widget_action_menu_set_menu_button_enabled(
     struct sc_ui_widget_action_menu *action_menu, size_t index, bool enabled) {
     assert(index < action_menu->menu_button_count);
     action_menu->menu_buttons[index]->enabled = enabled;
+}
+
+void
+sc_ui_widget_action_menu_set_menu_layout_count(
+    struct sc_ui_widget_action_menu *action_menu, size_t count) {
+    action_menu->menu_layout_count = count;
+}
+
+void
+sc_ui_widget_action_menu_set_menu_button_slot(
+    struct sc_ui_widget_action_menu *action_menu, size_t index, int slot) {
+    assert(index < action_menu->menu_button_count);
+    action_menu->menu_button_slots[index] = slot;
 }
 
 bool

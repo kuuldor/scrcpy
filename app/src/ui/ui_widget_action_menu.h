@@ -26,7 +26,9 @@ struct sc_ui_widget_action_menu {
     size_t toolbar_button_count;
     struct sc_ui_widget_button *menu_buttons[SC_UI_WIDGET_ACTION_MENU_MAX_BUTTONS];
     sc_ui_widget_action_handler menu_actions[SC_UI_WIDGET_ACTION_MENU_MAX_BUTTONS];
+    int menu_button_slots[SC_UI_WIDGET_ACTION_MENU_MAX_BUTTONS];
     size_t menu_button_count;
+    size_t menu_layout_count;
     void *userdata;
     int margin;
     int padding;
@@ -62,6 +64,14 @@ sc_ui_widget_action_menu_apply_variants(
 void
 sc_ui_widget_action_menu_set_menu_button_enabled(
     struct sc_ui_widget_action_menu *action_menu, size_t index, bool enabled);
+
+void
+sc_ui_widget_action_menu_set_menu_layout_count(
+    struct sc_ui_widget_action_menu *action_menu, size_t count);
+
+void
+sc_ui_widget_action_menu_set_menu_button_slot(
+    struct sc_ui_widget_action_menu *action_menu, size_t index, int slot);
 
 bool
 sc_ui_widget_action_menu_render(
