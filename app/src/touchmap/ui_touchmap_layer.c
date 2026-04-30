@@ -588,7 +588,7 @@ sc_ui_touchmap_layer_render_selection(
                 return true;
             }
             return sc_ui_touchmap_draw_selection_circle(
-                render_ctx, touchmap->walk.center, SC_TOUCHMAP_MIN_RADIUS + 4);
+                render_ctx, touchmap->walk.center, SC_TOUCHMAP_WALK_RADIUS + 4);
         case SC_TOUCHMAP_EDITOR_TARGET_WALK_RADIUS:
             if (!touchmap->has_walk) {
                 return true;
@@ -606,8 +606,8 @@ sc_ui_touchmap_layer_render_selection(
             int32_t radius = selection.target
                                  == SC_TOUCHMAP_EDITOR_TARGET_BUTTON_RADIUS
                              && btn->radius > 0
-                                 ? btn->radius + 4
-                                 : SC_TOUCHMAP_MIN_RADIUS + 4;
+                                  ? btn->radius + 4
+                                 : SC_TOUCHMAP_BUTTON_RADIUS + 4;
             return sc_ui_touchmap_draw_selection_circle(render_ctx, btn->center,
                                                         radius);
         }
@@ -659,10 +659,10 @@ sc_ui_touchmap_layer_render_touchmap(
                                : btn->is_skill ? 0xFFFFFFC0 : 0xFFFFFFA0;
 
         ok &= sc_ui_touchmap_draw_filled_circle(render_ctx, btn->center,
-                                                SC_TOUCHMAP_MIN_RADIUS,
+                                                SC_TOUCHMAP_BUTTON_RADIUS,
                                                 fill_color);
         ok &= sc_ui_touchmap_draw_circle_outline(render_ctx, btn->center,
-                                                 SC_TOUCHMAP_MIN_RADIUS,
+                                                 SC_TOUCHMAP_BUTTON_RADIUS,
                                                  outline_color, false);
 
         if (btn->is_skill && btn->radius > 0 && state->edit_mode) {

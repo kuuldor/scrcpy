@@ -309,7 +309,7 @@ sc_touchmap_state_add_button_at_center(struct sc_touchmap_state *touchmap,
 
     struct sc_gptm_touch_button button = {
         .center = center,
-        .radius = skill ? SC_TOUCHMAP_MIN_RADIUS : 0,
+        .radius = skill ? SC_TOUCHMAP_BUTTON_RADIUS : 0,
         .button = SC_GPTM_BUTTON_UNBOUND,
         .is_skill = skill,
     };
@@ -346,7 +346,7 @@ sc_touchmap_state_add_walk_at_center(struct sc_touchmap_state *touchmap) {
     }
 
     if (!sc_gptm_gamepad_touchmap_set_walk(touchmap->map, center,
-                                           SC_TOUCHMAP_MIN_RADIUS)) {
+                                           SC_TOUCHMAP_WALK_RADIUS)) {
         return false;
     }
 
