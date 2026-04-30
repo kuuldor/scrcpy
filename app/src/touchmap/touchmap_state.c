@@ -5,6 +5,7 @@
 
 #include "events.h"
 #include "screen.h"
+#include "touchmap/touchmap_utils.h"
 #include "third_party/tfd/tinyfiledialogs.h"
 #include "util/log.h"
 #include "util/thread.h"
@@ -185,10 +186,6 @@ sc_touchmap_state_replace_string(char **dst, const char *src) {
     *dst = new_str;
 return true;
 }
-
-static void
-sc_touchmap_start_thread(const char *name, SDL_ThreadFunction fn,
-                           void *data);
 
 bool
 sc_touchmap_state_load_auto_file(struct sc_touchmap_state *touchmap,
@@ -401,17 +398,6 @@ sc_touchmap_state_set_deferred_switch(struct sc_touchmap_state *touchmap,
     }
 
     return true;
-}
-
-static void
-sc_touchmap_start_thread(const char *name, SDL_ThreadFunction fn,
-                           void *data) {
-    SDL_Thread *thread = SDL_CreateThread(fn, name, data);
-    if (!thread) {
-        LOGE("Failed to create thread: %s", SDL_GetError());
-    } else {
-        SDL_DetachThread(thread);
-    }
 }
 
 static int
@@ -678,7 +664,6 @@ sc_touchmap_state_init(struct sc_touchmap_state *touchmap,
 
     touchmap->dirty = false;
     touchmap->exit_after_save = false;
-    touchmap->consume_left_button_up = false;
 
     touchmap->auto_enabled = auto_enabled && touchmap->loader.enabled;
     touchmap->manual_override = false;

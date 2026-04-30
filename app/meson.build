@@ -38,6 +38,7 @@ src = [
     'src/touchmap/touchmap_loader.c',
     'src/touchmap/touchmap_editor.c',
     'src/touchmap/touchmap_overlay.c',
+    'src/touchmap/touchmap_runtime.c',
     'src/touchmap/touchmap_state.c',
     'src/touchmap/ui_touchmap_layer.c',
     'src/ui/ui_button.c',

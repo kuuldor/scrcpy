@@ -26,7 +26,6 @@ struct sc_touchmap_state {
 
     bool dirty;
     bool exit_after_save;
-    bool consume_left_button_up;
 
     bool auto_enabled;
     bool manual_override;

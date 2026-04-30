@@ -19,9 +19,6 @@ enum sc_touchmap_editor_target {
 enum sc_touchmap_editor_mode {
     SC_TOUCHMAP_EDITOR_MODE_SELECT,
     SC_TOUCHMAP_EDITOR_MODE_ADD_MENU,
-    SC_TOUCHMAP_EDITOR_MODE_PLACE_BUTTON,
-    SC_TOUCHMAP_EDITOR_MODE_PLACE_SKILL,
-    SC_TOUCHMAP_EDITOR_MODE_PLACE_WALK,
 };
 
 struct sc_touchmap_editor_selection {

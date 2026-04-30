@@ -13,8 +13,8 @@
 #include "shortcut_mod.h"
 #include "util/log.h"
 
-#include "touchmap/touchmap.h"
 #include "touchmap/touchmap_overlay.h"
+#include "touchmap/touchmap_runtime.h"
 #include "events.h"
 
 bool
@@ -412,15 +412,6 @@ inverse_point(struct sc_point point, struct sc_size size,
         point.y = size.height - point.y;
     }
     return point;
-}
-
-static void sc_start_thread(const char * name, SDL_ThreadFunction fn, void *data) {
-    SDL_Thread *thread = SDL_CreateThread(fn, name, data);
-    if (!thread) {
-        LOGE("Failed to create thread: %s", SDL_GetError());
-    } else {
-        SDL_DetachThread(thread);
-    }
 }
 
 static void
@@ -826,12 +817,6 @@ sc_input_manager_process_mouse_button(struct sc_input_manager *im,
     bool ctrl_pressed = sc_touchmap_has_ctrl_modifier();
     bool shift_pressed = keymod & KMOD_SHIFT;
 
-    if (!down && event->button == SDL_BUTTON_LEFT
-            && im->touchmap.consume_left_button_up) {
-        im->touchmap.consume_left_button_up = false;
-        return;
-    }
-
     if (sc_touchmap_state_edit_mode_active(&im->touchmap)) {
         return;
     }
@@ -1091,7 +1076,7 @@ sc_input_manager_process_gamepad_axis(struct sc_input_manager *im,
 
 static void
 sc_input_manager_process_gamepad_button(struct sc_input_manager *im,
-                                       const SDL_ControllerButtonEvent *event) {
+                                        const SDL_ControllerButtonEvent *event) {
     enum sc_gamepad_button button = sc_gamepad_button_from_sdl(event->button);
     if (button == SC_GAMEPAD_BUTTON_UNKNOWN) {
         return;
@@ -1103,6 +1088,18 @@ sc_input_manager_process_gamepad_button(struct sc_input_manager *im,
         .button = button,
     };
     im->gp->ops->process_gamepad_button(im->gp, &evt);
+}
+
+static void
+sc_input_manager_process_gamepad_input(struct sc_input_manager *im,
+                                       const SDL_Event *event) {
+    if (event->type == SDL_CONTROLLERAXISMOTION) {
+        sc_input_manager_process_gamepad_axis(im, &event->caxis);
+    } else {
+        assert(event->type == SDL_CONTROLLERBUTTONDOWN
+            || event->type == SDL_CONTROLLERBUTTONUP);
+        sc_input_manager_process_gamepad_button(im, &event->cbutton);
+    }
 }
 
 static bool
@@ -1130,159 +1127,6 @@ sc_input_manager_process_file(struct sc_input_manager *im,
     bool ok = sc_file_pusher_request(im->fp, action, file);
     if (!ok) {
         free(file);
-    }
-}
-
-
-static void 
-sc_handle_skill_button_direction(struct sc_input_manager *im, struct sc_gptm_touch_button *touch_btn, struct sc_point pos) {
-    if (sc_touchmap_state_edit_mode_active(&im->touchmap)) {
-        return;
-    }
-
-    touch_btn->current_pos.x = touch_btn->center.x + (pos.x * touch_btn->radius / SDL_MAX_SINT16);
-    touch_btn->current_pos.y = touch_btn->center.y + (pos.y * touch_btn->radius / SDL_MAX_SINT16);
-
-    simulate_virtual_touch(im, touch_btn->finger_id, AMOTION_EVENT_ACTION_MOVE, touch_btn->current_pos);
-}
-
-struct delayed_skill_ctx {
-    Uint32 delay;
-    struct sc_input_manager *im;
-    struct sc_gptm_touch_button * button;
-    struct sc_point pos;
-} ;
-
-static int delay_skill_event_thread(void *data) {
-    struct delayed_skill_ctx *ctx = (struct delayed_skill_ctx *)data;
-
-    SDL_Delay(ctx->delay);
-    
-    sc_handle_skill_button_direction(ctx->im, ctx->button, ctx->pos);
-
-    SDL_free(data);
-
-    return 0;
-}
-
-static void 
-sc_handle_touchmap_button(struct sc_input_manager *im, uint8_t button, uint8_t state) {
-    if (sc_touchmap_state_edit_mode_active(&im->touchmap)) {
-        return;
-    }
-
-    struct sc_gptm_gamepad_touchmap * map = im->touchmap.map;
-    struct sc_gptm_touch_button *touch_btn =
-        sc_gptm_gamepad_touchmap_find_button(map, button);
-    if (touch_btn == NULL) {
-        LOGE("Button %d not found in touch map", button);
-        return;
-    }
-    if (state) {
-        if (!touch_btn->touch_down) {
-            touch_btn->touch_down = true;
-            touch_btn->current_pos = touch_btn->center;
-            simulate_virtual_touch(im, touch_btn->finger_id, AMOTION_EVENT_ACTION_DOWN, touch_btn->center);
-
-            if (touch_btn->is_skill) {
-                // Hard code to use the rigth joystick to control skill 
-                struct sc_point joystick = im->touchmap.map->joystick[1];
-
-                int delta_x, delta_y, distance;
-                delta_x = joystick.x * touch_btn->radius / SDL_MAX_SINT16;
-                delta_y = joystick.y * touch_btn->radius / SDL_MAX_SINT16;
-                distance = delta_x * delta_x + delta_y * delta_y;
-
-                if (distance >= SC_GPTM_WALK_CONTROL_DEADZONE) {
-                    struct delayed_skill_ctx * ctx = SDL_malloc(sizeof(struct delayed_skill_ctx));
-                    if (ctx != NULL) {
-                        ctx->delay = 5;
-                        ctx->im = im;
-                        ctx->button = touch_btn;
-                        ctx->pos = joystick;
-
-                        sc_start_thread("DelaySkill", delay_skill_event_thread, ctx);                    
-                    }
-                }
-            }
-        }
-    } else {
-        if (touch_btn->touch_down) {
-            touch_btn->touch_down = false;
-            simulate_virtual_touch(im, touch_btn->finger_id, AMOTION_EVENT_ACTION_UP, touch_btn->current_pos);
-        }
-    }
-}
-
-static void 
-sc_handle_touchmap_walk(struct sc_input_manager *im, struct sc_point pos) {
-    if (sc_touchmap_state_edit_mode_active(&im->touchmap)) {
-        return;
-    }
-
-    if (!im->touchmap.map->has_walk) {
-        return;
-    }
-
-    struct sc_gptm_walk_control *walk = &im->touchmap.map->walk;
-
-    int wctl_x, wctl_y, distance;
-    wctl_x = pos.x * walk->radius / SDL_MAX_SINT16;
-    wctl_y = pos.y * walk->radius / SDL_MAX_SINT16;
-
-    walk->current_pos.x = walk->center.x + wctl_x;
-    walk->current_pos.y = walk->center.y + wctl_y;
-
-
-    distance = wctl_x * wctl_x + wctl_y * wctl_y;
-    if (distance < SC_GPTM_WALK_CONTROL_DEADZONE) {
-        if (walk->touch_down) {
-            walk->touch_down = false;
-            simulate_virtual_touch(im, walk->finger_id, AMOTION_EVENT_ACTION_UP, walk->center);
-        }
-    } else {
-        if (!walk->touch_down) {
-            walk->touch_down = true;
-            simulate_virtual_touch(im, walk->finger_id, AMOTION_EVENT_ACTION_DOWN, walk->center);
-        }
-        simulate_virtual_touch(im, walk->finger_id, AMOTION_EVENT_ACTION_MOVE, walk->current_pos);
-    }
-}
-
-static void 
-sc_handle_touchmap_skill_cast(struct sc_input_manager *im, struct sc_point pos) {
-    if (sc_touchmap_state_edit_mode_active(&im->touchmap)) {
-        return;
-    }
-
-    struct sc_gptm_gamepad_touchmap *map = im->touchmap.map;
-
-    for (int i = 0; i < map->button_cnt; i++) {
-        struct sc_gptm_touch_button * btn = &map->buttons[i];
-        if (btn->is_skill && btn->touch_down) {
-            sc_handle_skill_button_direction(im, btn, pos);
-        }
-    }
-}
-
-static void 
-sc_handle_touchmap_joystick(struct sc_input_manager *im, int idx, int64_t value, bool is_x_axis) {
-    if (sc_touchmap_state_edit_mode_active(&im->touchmap)) {
-        return;
-    }
-
-    struct sc_point *joystick = &im->touchmap.map->joystick[idx];
-
-    if (is_x_axis) {
-        joystick->x = value;
-    } else {
-        joystick->y = value;
-    }
-
-    if (idx == 0) {
-        sc_handle_touchmap_walk(im, *joystick);
-    } else if (idx == 1) {
-        sc_handle_touchmap_skill_cast(im, *joystick);
     }
 }
 
@@ -1340,49 +1184,15 @@ sc_input_manager_handle_event(struct sc_input_manager *im,
             sc_input_manager_process_gamepad_device(im, &event->cdevice);
             break;
         case SDL_CONTROLLERAXISMOTION:
-            if (!im->gp || paused) {
-                break;
-            }
-
-            LOGD("Gamepad Axis: (%d, %d, %d)", event->caxis.which, event->caxis.axis, event->caxis.value);
-
-            if (im->touchmap.map == NULL) {
-                sc_input_manager_process_gamepad_axis(im, &event->caxis);
-            } else {
-                int64_t value = event->caxis.value;
-                switch (event->caxis.axis) {
-                case SDL_CONTROLLER_AXIS_LEFTX:
-                case SDL_CONTROLLER_AXIS_LEFTY:
-                    sc_handle_touchmap_joystick(im, 0, value, event->caxis.axis == SDL_CONTROLLER_AXIS_LEFTX);
-                    break;
-                case SDL_CONTROLLER_AXIS_RIGHTX:
-                case SDL_CONTROLLER_AXIS_RIGHTY:
-                    sc_handle_touchmap_joystick(im, 1, value, event->caxis.axis == SDL_CONTROLLER_AXIS_RIGHTX);
-                    break;
-                case SDL_CONTROLLER_AXIS_TRIGGERLEFT:
-                case SDL_CONTROLLER_AXIS_TRIGGERRIGHT:
-                    if (value > SDL_MAX_SINT16 / 2) {
-                        sc_handle_touchmap_button(im, SDL_CONTROLLER_BUTTON_MAX+event->caxis.axis, 1);
-
-                    } else if (value < SDL_MAX_SINT16 / 3) {
-                        sc_handle_touchmap_button(im, SDL_CONTROLLER_BUTTON_MAX+event->caxis.axis, 0);
-                    }
-                    break;
-                }
-            }            
-            break;
         case SDL_CONTROLLERBUTTONDOWN:
         case SDL_CONTROLLERBUTTONUP:
             if (!im->gp || paused) {
                 break;
             }
-
-            LOGD("Gamepad Button: (%d, %d, %d)", event->cbutton.which, event->cbutton.button, event->cbutton.state);
-
-            if (im->touchmap.map == NULL) {
-                sc_input_manager_process_gamepad_button(im, &event->cbutton);
-            } else if (im->touchmap.map != NULL) {
-                sc_handle_touchmap_button(im, event->cbutton.button, event->cbutton.state);
+            if (im->touchmap.map) {
+                sc_touchmap_runtime_handle_event(im, event);
+            } else {
+                sc_input_manager_process_gamepad_input(im, event);
             }
             break;
         case SDL_DROPFILE: {
@@ -1392,34 +1202,10 @@ sc_input_manager_handle_event(struct sc_input_manager *im,
             sc_input_manager_process_file(im, &event->drop);
             break;
         }
-        case SC_EVENT_FILE_DIALOG: {
-            const char * file_name = event->user.data1;
-            sc_touchmap_state_handle_open_dialog_result(&im->touchmap,
-                                                        file_name);
-            SDL_free((void*)file_name);
+        case SC_EVENT_FILE_DIALOG:
+        case SC_EVENT_TOUCHMAP_SAVE:
+        case SC_EVENT_FG_APP_CHANGED:
+            sc_touchmap_runtime_handle_event(im, event);
             break;
-        }
-        case SC_EVENT_TOUCHMAP_SAVE: {
-            const char * file_name = event->user.data1;
-            sc_touchmap_state_handle_save_dialog_result(&im->touchmap,
-                                                        event->user.code == 1,
-                                                        file_name);
-            SDL_free((void*)file_name);
-            break;
-        }
-        case SC_EVENT_FG_APP_CHANGED: {
-            struct sc_fg_app_changed_event *payload =
-                event->user.data1;
-            const char *package_name = payload ? payload->package_name : NULL;
-            if (payload) {
-                LOGD("Got FG APP CHANGED Event: %s",
-                     package_name ? package_name : "(none)");
-            }
-
-            sc_touchmap_state_on_foreground_app_changed(&im->touchmap,
-                                                        package_name);
-            sc_fg_app_changed_event_destroy(payload);
-            break;
-        }
     }
 }
