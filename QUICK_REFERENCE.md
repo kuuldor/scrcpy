@@ -73,8 +73,8 @@ shortcuts are currently hard-coded to Ctrl.
 2. If no touchmap is loaded, click `NEW` to create an empty in-memory map.
 3. Click `EDIT` to enter edit mode.
 4. Use the toolbar:
-   - `ADD`: choose `BUTTON`, `SKILL`, or `WALK`, then click the overlay to place
-     it.
+   - `ADD`: choose `BUTTON`, `SKILL`, or `WALK` to add the control at the
+     center of the screen.
    - `DEL`: delete the selected control.
    - `QUIT`: leave edit mode, with a save prompt if there are unsaved changes.
 5. Select a button or skill, then press a gamepad button or trigger to bind it.
@@ -128,9 +128,11 @@ Supported button names include:
 
 ## File Locations
 
-- **Runtime model and JSON**: `/home/lucd/work/scrcpy/app/src/touchmap.{c,h}`
-- **Editor logic**: `/home/lucd/work/scrcpy/app/src/touchmap_editor.{c,h}`
-- **Overlay rendering**: `/home/lucd/work/scrcpy/app/src/touchmap_overlay.{c,h}`
+- **Runtime model and JSON**: `/home/lucd/work/scrcpy/app/src/touchmap/touchmap.{c,h}`
+- **State and dialog handling**: `/home/lucd/work/scrcpy/app/src/touchmap/touchmap_state.{c,h}`
+- **Runtime gamepad-to-touch**: `/home/lucd/work/scrcpy/app/src/touchmap/touchmap_runtime.{c,h}`
+- **Editor logic**: `/home/lucd/work/scrcpy/app/src/touchmap/touchmap_editor.{c,h}`
+- **Overlay rendering**: `/home/lucd/work/scrcpy/app/src/touchmap/ui_touchmap_layer.{c,h}`
 - **Input integration and shortcuts**: `/home/lucd/work/scrcpy/app/src/input_manager.c`
 - **Display integration**: `/home/lucd/work/scrcpy/app/src/display.{c,h}`
 - **Maintained design doc**: `/home/lucd/work/scrcpy/TOUCHMAP.md`
@@ -167,8 +169,11 @@ Supported button names include:
 ### Key Functions
 - `parse_touchmap_config()` - Load touchmap JSON
 - `save_touchmap_config()` - Save touchmap JSON
-- `sc_touchmap_overlay_render()` - Main overlay drawing function
-- `sc_touchmap_overlay_hit_control()` - Toolbar and menu hit testing
+- `sc_touchmap_state_load_file()` - Load touchmap file into state
+- `sc_touchmap_state_save()` - Save touchmap to file
+- `sc_touchmap_runtime_handle_event()` - Handle gamepad axis/button event
+- `sc_ui_touchmap_layer_render()` - Main overlay drawing function
+- `sc_ui_touchmap_layer_handle_event()` - Toolbar and menu event handling
 - `sc_touchmap_editor_try_start_drag()` - Edit-mode hit testing
 - `sc_gptm_gamepad_touchmap_add_button()` - Append button/skill mapping
 - `sc_gptm_gamepad_touchmap_bind_button()` - Bind or rebind selected mapping
