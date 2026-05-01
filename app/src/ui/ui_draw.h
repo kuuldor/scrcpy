@@ -36,6 +36,16 @@ sc_ui_draw_rect_border(const struct sc_ui_render_ctx *render_ctx,
                        const SDL_Rect *rect, struct sc_ui_color color);
 
 bool
+sc_ui_draw_fill_circle(const struct sc_ui_render_ctx *render_ctx,
+                       struct sc_point center, int32_t radius,
+                       struct sc_ui_color color);
+
+bool
+sc_ui_draw_circle_outline(const struct sc_ui_render_ctx *render_ctx,
+                          struct sc_point center, int32_t radius,
+                          struct sc_ui_color color, bool dashed);
+
+bool
 sc_ui_draw_bitmap_icon(const struct sc_ui_render_ctx *render_ctx,
                        int32_t center_x, int32_t center_y,
                        const uint64_t *rows, int width, int height, int scale,

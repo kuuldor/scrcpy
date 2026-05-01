@@ -49,6 +49,7 @@ src = [
     'src/ui/ui_widget_action_button.c',
     'src/ui/ui_widget_action_menu.c',
     'src/ui/ui_widget_button.c',
+    'src/ui/ui_widget_circle_button.c',
     'src/ui/ui_widget_label.c',
     'src/ui/ui_widget_menu.c',
     'src/ui/ui_widget_panel.c',

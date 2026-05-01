@@ -317,13 +317,17 @@ Planned add/remove workflow:
 - `app/src/input_manager.h`: input manager state and shortut handling fields.
 - `app/src/input_manager.c`: shortcut handling and gamepad event routing to the runtime
   module.
-- `app/src/touchmap_utils.h`: shared utility functions for starting SDL threads.
+- `app/src/touchmap/touchmap_loader.h`: auto-loader state, directory path, package index struct.
+- `app/src/touchmap/touchmap_loader.c`: directory scanning, JSON `packageName` extraction, package-to-path index, and rebuild helpers.
 - `app/src/touchmap/touchmap_overlay.h`: overlay coordinate transform API.
 - `app/src/touchmap/touchmap_overlay.c`: SDL overlay coordinate transforms.
 - `app/src/touchmap/ui_touchmap_layer.h`: UI layer rendering and hit testing API.
-- `app/src/touchmap/ui_touchmap_layer.c`: SDL overlay drawing, widgets,
+- `app/src/touchmap/ui_touchmap_layer.c`: SDL overlay drawing, widget creation,
   coordinate transforms, glyph labels, selection highlighting, edit button
-  layout, and overlay visibility/edit-mode state.
+  layout, and overlay visibility/edit-mode state. Uses
+  `sc_ui_widget_circle_button` for button and walk rendering.
+- `app/src/ui/ui_draw.{c,h}`: shared drawing primitives including `sc_ui_draw_fill_circle()` and `sc_ui_draw_circle_outline()` for logical-to-drawable coordinate conversion.
+- `app/src/ui/ui_widget_circle_button.{c,h}`: reusable circle widget with hover/press/checked states, icon rendering, outer dashed outline, and touch-down marker support.
 - `app/src/display.h`: display-owned overlay state and active touchmap pointer.
 - `app/src/display.c`: overlay initialization, destruction, rendering, and
   display-level touchmap setters/toggles.

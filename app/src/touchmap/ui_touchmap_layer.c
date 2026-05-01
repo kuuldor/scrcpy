@@ -1,7 +1,5 @@
 #include "ui_touchmap_layer.h"
 
-#include <math.h>
-
 #include <SDL2/SDL.h>
 
 #include "input_manager.h"
@@ -9,9 +7,9 @@
 #include "ui/ui_context.h"
 #include "ui/ui_geom.h"
 #include "ui/ui_id.h"
+#include "ui/ui_widget_circle_button.h"
 #include "touchmap/touchmap_state.h"
 
-#define SC_UI_TOUCHMAP_CIRCLE_POINTS 32
 #define SC_UI_TOUCHMAP_EDIT_MARGIN 8
 #define SC_UI_TOUCHMAP_TOOLBAR_PADDING 6
 #define SC_UI_TOUCHMAP_TOOLBAR_GAP 6
@@ -27,12 +25,10 @@
 
 #define SC_UI_TOUCHMAP_PRESSED_RADIUS 10
 #define SC_UI_TOUCHMAP_WALK_POS_RADIUS 5
-#define SC_UI_TOUCHMAP_GLYPH_SCALE_BUTTON 1
-#define SC_UI_TOUCHMAP_GLYPH_SCALE_WALK 3
+#define SC_UI_TOUCHMAP_WALK_ICON_SIZE 144
 #define SC_UI_TOUCHMAP_GLYPH_SPACING (-4)
 #define SC_UI_TOUCHMAP_GLYPH_WIDTH 24
 #define SC_UI_TOUCHMAP_GLYPH_HEIGHT 24
-#define SC_UI_TOUCHMAP_ICON_MAX_WIDTH (SC_UI_TOUCHMAP_GLYPH_WIDTH * 2)
 #define SC_UI_TOUCHMAP_WALK_ICON_WIDTH (SC_UI_TOUCHMAP_GLYPH_WIDTH * 3)
 #define SC_UI_TOUCHMAP_WALK_ICON_HEIGHT (SC_UI_TOUCHMAP_GLYPH_HEIGHT * 3)
 
@@ -190,119 +186,13 @@ sc_ui_touchmap_color_from_u32(uint32_t color) {
 }
 
 static bool
-sc_ui_touchmap_set_color(SDL_Renderer *renderer, uint32_t color) {
-    struct sc_ui_color rgba = sc_ui_touchmap_color_from_u32(color);
-    return SDL_SetRenderDrawColor(renderer, rgba.r, rgba.g, rgba.b, rgba.a)
-        == 0;
-}
-
-static bool
-sc_ui_touchmap_logical_to_drawable_point(const struct sc_ui_render_ctx *ctx,
-                                         struct sc_point logical,
-                                         struct sc_point *out) {
-    if (!ctx->ui) {
-        *out = logical;
-        return true;
-    }
-
-    return sc_ui_context_logical_to_drawable_point(ctx->ui, logical, out);
-}
-
-static int32_t
-sc_ui_touchmap_logical_to_drawable_length(const struct sc_ui_render_ctx *ctx,
-                                          int32_t value) {
-    if (!ctx->ui) {
-        return value;
-    }
-
-    return sc_ui_context_logical_to_drawable_length(ctx->ui, value);
-}
-
-static bool
-sc_ui_touchmap_draw_filled_circle(const struct sc_ui_render_ctx *ctx,
-                                  struct sc_point center, int32_t radius,
-                                  uint32_t color) {
-    SDL_Renderer *renderer = ctx->renderer;
-    struct sc_point drawable_center;
-    if (!sc_ui_touchmap_logical_to_drawable_point(ctx, center,
-                                                  &drawable_center)) {
-        return true;
-    }
-
-    int32_t drawable_radius =
-        sc_ui_touchmap_logical_to_drawable_length(ctx, radius);
-    if (drawable_radius < 1) {
-        drawable_radius = 1;
-    }
-
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    if (!sc_ui_touchmap_set_color(renderer, color)) {
-        return false;
-    }
-
-    for (int32_t y = -drawable_radius; y <= drawable_radius; ++y) {
-        int32_t x = (int32_t) sqrt((double) drawable_radius * drawable_radius
-                                   - (double) y * y);
-        if (SDL_RenderDrawLine(renderer, drawable_center.x - x,
-                               drawable_center.y + y,
-                               drawable_center.x + x,
-                               drawable_center.y + y)) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-static bool
-sc_ui_touchmap_draw_circle_outline(const struct sc_ui_render_ctx *ctx,
-                                   struct sc_point center, int32_t radius,
-                                   uint32_t color, bool dashed) {
-    SDL_Renderer *renderer = ctx->renderer;
-    struct sc_point drawable_center;
-    if (!sc_ui_touchmap_logical_to_drawable_point(ctx, center,
-                                                  &drawable_center)) {
-        return true;
-    }
-
-    int32_t drawable_radius =
-        sc_ui_touchmap_logical_to_drawable_length(ctx, radius);
-    if (drawable_radius < 1) {
-        drawable_radius = 1;
-    }
-
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    if (!sc_ui_touchmap_set_color(renderer, color)) {
-        return false;
-    }
-
-    double angle_step = 2.0 * M_PI / SC_UI_TOUCHMAP_CIRCLE_POINTS;
-    for (int i = 0; i < SC_UI_TOUCHMAP_CIRCLE_POINTS; ++i) {
-        if (dashed && i % 2) {
-            continue;
-        }
-
-        double angle1 = i * angle_step;
-        double angle2 = (i + 1) * angle_step;
-        int x1 = drawable_center.x + (int) (drawable_radius * cos(angle1));
-        int y1 = drawable_center.y + (int) (drawable_radius * sin(angle1));
-        int x2 = drawable_center.x + (int) (drawable_radius * cos(angle2));
-        int y2 = drawable_center.y + (int) (drawable_radius * sin(angle2));
-        if (SDL_RenderDrawLine(renderer, x1, y1, x2, y2)) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-static bool
 sc_ui_touchmap_draw_selection_circle(const struct sc_ui_render_ctx *ctx,
                                      struct sc_point center, int32_t radius) {
     for (int32_t offset = 0; offset < 3; ++offset) {
-        if (!sc_ui_touchmap_draw_circle_outline(ctx, center, radius + offset,
-                                                SC_UI_TOUCHMAP_SELECTION_COLOR,
-                                                false)) {
+        if (!sc_ui_draw_circle_outline(
+                ctx, center, radius + offset,
+                sc_ui_touchmap_color_from_u32(SC_UI_TOUCHMAP_SELECTION_COLOR),
+                false)) {
             return false;
         }
     }
@@ -502,39 +392,120 @@ sc_ui_touchmap_compose_label_icon(enum sc_ui_touchmap_label label,
 }
 
 static bool
-sc_ui_touchmap_draw_button_label(const struct sc_ui_render_ctx *ctx,
-                                 struct sc_point center,
-                                 enum sc_ui_touchmap_label label,
-                                 int scale) {
-    uint64_t rows[SC_UI_TOUCHMAP_GLYPH_HEIGHT];
-    int width;
-    if (!sc_ui_touchmap_compose_label_icon(label, rows, &width)) {
-        return true;
+sc_ui_touchmap_button_is_checked(const struct sc_touchmap_state *state,
+                                 int index) {
+    if (!state->edit_mode || !state->map) {
+        return false;
     }
 
-    SDL_Rect rect = {
-        .w = width * scale,
-        .h = SC_UI_TOUCHMAP_GLYPH_HEIGHT * scale,
-    };
-    rect.x = center.x - rect.w / 2;
-    rect.y = center.y - rect.h / 2;
-    return sc_ui_draw_bitmap_icon_in_rect(ctx, &rect, rows, width,
-                                          SC_UI_TOUCHMAP_GLYPH_HEIGHT,
-                                          sc_ui_touchmap_color_from_u32(
-                                              SC_UI_TOUCHMAP_TEXT_COLOR));
+    struct sc_touchmap_editor_selection selection = state->editor.selection;
+    return (selection.target == SC_TOUCHMAP_EDITOR_TARGET_BUTTON_CENTER
+            || selection.target == SC_TOUCHMAP_EDITOR_TARGET_BUTTON_RADIUS)
+        && selection.button_index == index;
 }
 
 static bool
-sc_ui_touchmap_draw_walk_icon(const struct sc_ui_render_ctx *ctx,
-                              struct sc_point center, int scale) {
-    uint64_t rows[SC_UI_TOUCHMAP_WALK_ICON_HEIGHT];
-    SDL_memset(rows, 0, sizeof(rows));
+sc_ui_touchmap_walk_is_checked(const struct sc_touchmap_state *state) {
+    if (!state->edit_mode || !state->map || !state->map->has_walk) {
+        return false;
+    }
+
+    struct sc_touchmap_editor_selection selection = state->editor.selection;
+    return selection.target == SC_TOUCHMAP_EDITOR_TARGET_WALK_CENTER
+        || selection.target == SC_TOUCHMAP_EDITOR_TARGET_WALK_RADIUS;
+}
+
+static void
+sc_ui_touchmap_apply_circle_colors(struct sc_ui_widget_circle_button *widget,
+                                   uint32_t fill_color,
+                                   uint32_t outline_color) {
+    widget->style.fill_color = sc_ui_touchmap_color_from_u32(fill_color);
+    widget->style.fill_hover_color = widget->style.fill_color;
+    widget->style.fill_pressed_color = widget->style.fill_color;
+    widget->style.fill_checked_color = widget->style.fill_color;
+    widget->style.fill_disabled_color = widget->style.fill_color;
+    widget->style.outline_color = sc_ui_touchmap_color_from_u32(outline_color);
+    widget->style.outline_hover_color = sc_ui_touchmap_color_from_u32(0xFFFFFFFF);
+    widget->style.outline_pressed_color =
+        sc_ui_touchmap_color_from_u32(0xFFFFFFFF);
+    widget->style.outline_checked_color =
+        sc_ui_touchmap_color_from_u32(SC_UI_TOUCHMAP_SELECTION_COLOR);
+    widget->style.outline_disabled_color = widget->style.outline_color;
+    widget->style.icon_color = sc_ui_touchmap_color_from_u32(
+        SC_UI_TOUCHMAP_TEXT_COLOR);
+}
+
+static struct sc_ui_widget_circle_button
+sc_ui_touchmap_make_button_widget(const struct sc_ui_touchmap_layer *tm,
+                                  const struct sc_gptm_touch_button *btn,
+                                  int index) {
+    bool bound = sc_gptm_touch_button_is_bound(btn);
+    uint32_t fill_color = !bound ? SC_UI_TOUCHMAP_UNBOUND_COLOR
+                        : btn->is_skill ? SC_UI_TOUCHMAP_SKILL_COLOR
+                                        : SC_UI_TOUCHMAP_BUTTON_COLOR;
+    uint32_t outline_color = !bound ? 0xFF3434FF
+                           : btn->is_skill ? 0xFFFFFFC0 : 0xFFFFFFA0;
+
+    struct sc_ui_widget_circle_button widget;
+    sc_ui_widget_circle_button_init(&widget,
+                                    sc_ui_id_from_u32(tm, 1000 + index),
+                                    btn->center, SC_TOUCHMAP_BUTTON_RADIUS);
+    sc_ui_touchmap_apply_circle_colors(&widget, fill_color, outline_color);
+    widget.checked = sc_ui_touchmap_button_is_checked(tm->touchmap_state, index);
+
+    if (btn->is_skill && btn->radius > 0 && tm->touchmap_state->edit_mode) {
+        widget.outer_outline.enabled = true;
+        widget.outer_outline.radius = btn->radius;
+        widget.outer_outline.color =
+            sc_ui_touchmap_color_from_u32(SC_UI_TOUCHMAP_DASH_COLOR);
+        widget.outer_outline.dashed = true;
+    }
+
+    if (btn->touch_down) {
+        widget.marker.enabled = true;
+        widget.marker.center = btn->current_pos;
+        widget.marker.radius = SC_UI_TOUCHMAP_PRESSED_RADIUS;
+        widget.marker.color = sc_ui_touchmap_color_from_u32(outline_color);
+    }
+
+    return widget;
+}
+
+static struct sc_ui_widget_circle_button
+sc_ui_touchmap_make_walk_widget(const struct sc_ui_touchmap_layer *tm,
+                                const struct sc_gptm_walk_control *walk) {
+    struct sc_ui_widget_circle_button widget;
+    sc_ui_widget_circle_button_init(&widget, sc_ui_id_from_u32(tm, 900),
+                                    walk->center, walk->radius);
+    sc_ui_touchmap_apply_circle_colors(&widget, SC_UI_TOUCHMAP_WALK_COLOR,
+                                       SC_UI_TOUCHMAP_TEXT_COLOR);
+    widget.checked = sc_ui_touchmap_walk_is_checked(tm->touchmap_state);
+    widget.icon.width = SC_UI_TOUCHMAP_WALK_ICON_WIDTH;
+    widget.icon.height = SC_UI_TOUCHMAP_WALK_ICON_HEIGHT;
+    widget.icon.size = SC_UI_TOUCHMAP_WALK_ICON_SIZE;
+
+    if (walk->touch_down) {
+        widget.marker.enabled = true;
+        widget.marker.center = walk->current_pos;
+        widget.marker.radius = SC_UI_TOUCHMAP_WALK_POS_RADIUS;
+        widget.marker.color = sc_ui_touchmap_color_from_u32(0xFFFFFFE0);
+    }
+
+    return widget;
+}
+
+static uint64_t *
+sc_ui_touchmap_compose_walk_icon(void) {
+    uint64_t *rows = SDL_calloc(SC_UI_TOUCHMAP_WALK_ICON_HEIGHT,
+                                sizeof(*rows));
+    if (!rows) {
+        return NULL;
+    }
 
     int center_x = SC_UI_TOUCHMAP_WALK_ICON_WIDTH / 2;
     int center_y = SC_UI_TOUCHMAP_WALK_ICON_HEIGHT / 2;
-    int offset = (SC_UI_TOUCHMAP_GLYPH_HEIGHT + SC_UI_TOUCHMAP_GLYPH_SPACING)
-               / 2 * SC_UI_TOUCHMAP_GLYPH_SCALE_WALK;
-    int glyph_offset = offset / scale;
+    int glyph_offset = (SC_UI_TOUCHMAP_GLYPH_HEIGHT
+                      + SC_UI_TOUCHMAP_GLYPH_SPACING) / 2;
     int half_glyph_width = SC_UI_TOUCHMAP_GLYPH_WIDTH / 2;
     int half_glyph_height = SC_UI_TOUCHMAP_GLYPH_HEIGHT / 2;
 
@@ -563,17 +534,7 @@ sc_ui_touchmap_draw_walk_icon(const struct sc_ui_render_ctx *ctx,
                                     center_x - half_glyph_width,
                                     center_y + glyph_offset - half_glyph_height - 1);
 
-    SDL_Rect rect = {
-        .w = SC_UI_TOUCHMAP_WALK_ICON_WIDTH * scale,
-        .h = SC_UI_TOUCHMAP_WALK_ICON_HEIGHT * scale,
-    };
-    rect.x = center.x - rect.w / 2;
-    rect.y = center.y - rect.h / 2;
-    return sc_ui_draw_bitmap_icon_in_rect(ctx, &rect, rows,
-                                          SC_UI_TOUCHMAP_WALK_ICON_WIDTH,
-                                          SC_UI_TOUCHMAP_WALK_ICON_HEIGHT,
-                                          sc_ui_touchmap_color_from_u32(
-                                              SC_UI_TOUCHMAP_TEXT_COLOR));
+    return rows;
 }
 
 static bool
@@ -628,61 +589,33 @@ sc_ui_touchmap_layer_render_touchmap(
 
     bool ok = true;
     if (touchmap->has_walk && touchmap->walk.radius > 0) {
-        ok &= sc_ui_touchmap_draw_filled_circle(render_ctx,
-                                                touchmap->walk.center,
-                                                touchmap->walk.radius,
-                                                SC_UI_TOUCHMAP_WALK_COLOR);
-        ok &= sc_ui_touchmap_draw_circle_outline(render_ctx,
-                                                 touchmap->walk.center,
-                                                 touchmap->walk.radius,
-                                                 SC_UI_TOUCHMAP_TEXT_COLOR,
-                                                 false);
+        struct sc_ui_widget_circle_button widget =
+            sc_ui_touchmap_make_walk_widget(tm, &touchmap->walk);
 
-        ok &= sc_ui_touchmap_draw_walk_icon(render_ctx, touchmap->walk.center,
-                                            SC_UI_TOUCHMAP_GLYPH_SCALE_WALK);
-    }
+        uint64_t *rows = sc_ui_touchmap_compose_walk_icon();
+        widget.icon.rows = rows;
 
-    if (touchmap->has_walk && touchmap->walk.touch_down) {
-        ok &= sc_ui_touchmap_draw_filled_circle(render_ctx,
-                                                touchmap->walk.current_pos,
-                                                SC_UI_TOUCHMAP_WALK_POS_RADIUS,
-                                                0xFFFFFFE0);
+        ok &= sc_ui_widget_circle_button_render(&widget, render_ctx);
+        SDL_free(rows);
     }
 
     for (int i = 0; i < touchmap->button_cnt; ++i) {
         const struct sc_gptm_touch_button *btn = &touchmap->buttons[i];
-        bool bound = sc_gptm_touch_button_is_bound(btn);
-        uint32_t fill_color = !bound ? SC_UI_TOUCHMAP_UNBOUND_COLOR
-                            : btn->is_skill ? SC_UI_TOUCHMAP_SKILL_COLOR
-                                            : SC_UI_TOUCHMAP_BUTTON_COLOR;
-        uint32_t outline_color = !bound ? 0xFF3434FF
-                               : btn->is_skill ? 0xFFFFFFC0 : 0xFFFFFFA0;
+        struct sc_ui_widget_circle_button widget =
+            sc_ui_touchmap_make_button_widget(tm, btn, i);
 
-        ok &= sc_ui_touchmap_draw_filled_circle(render_ctx, btn->center,
-                                                SC_TOUCHMAP_BUTTON_RADIUS,
-                                                fill_color);
-        ok &= sc_ui_touchmap_draw_circle_outline(render_ctx, btn->center,
-                                                 SC_TOUCHMAP_BUTTON_RADIUS,
-                                                 outline_color, false);
-
-        if (btn->is_skill && btn->radius > 0 && state->edit_mode) {
-            ok &= sc_ui_touchmap_draw_circle_outline(render_ctx, btn->center,
-                                                     btn->radius,
-                                                     SC_UI_TOUCHMAP_DASH_COLOR,
-                                                     true);
+        uint64_t rows[SC_UI_TOUCHMAP_GLYPH_HEIGHT];
+        int width;
+        if (sc_ui_touchmap_compose_label_icon(
+                sc_ui_touchmap_layer_get_button_label(btn->button), rows,
+                &width)) {
+            widget.icon.rows = rows;
+            widget.icon.width = width;
+            widget.icon.height = SC_UI_TOUCHMAP_GLYPH_HEIGHT;
+            widget.icon.size = width;
         }
 
-        if (btn->touch_down) {
-            ok &= sc_ui_touchmap_draw_filled_circle(render_ctx,
-                                                    btn->current_pos,
-                                                    SC_UI_TOUCHMAP_PRESSED_RADIUS,
-                                                    outline_color);
-        }
-
-        ok &= sc_ui_touchmap_draw_button_label(render_ctx, btn->center,
-                                               sc_ui_touchmap_layer_get_button_label(
-                                                   btn->button),
-                                               SC_UI_TOUCHMAP_GLYPH_SCALE_BUTTON);
+        ok &= sc_ui_widget_circle_button_render(&widget, render_ctx);
     }
 
     if (state->edit_mode) {
@@ -1027,9 +960,108 @@ sc_ui_touchmap_layer_handle_gamepad_event(
     return false;
 }
 
+static struct sc_ui_button_result
+sc_ui_touchmap_layer_handle_button_widgets_event(
+        struct sc_ui_touchmap_layer *tm, struct sc_ui_context *ui,
+        const struct sc_ui_event *event, int *out_index) {
+    struct sc_ui_button_result result = {
+        .input = {false, false},
+        .action = SC_UI_BUTTON_ACTION_NONE,
+    };
+    *out_index = -1;
+
+    struct sc_gptm_gamepad_touchmap *map = tm->touchmap_state->map;
+    if (!map) {
+        return result;
+    }
+
+    for (int i = 0; i < map->button_cnt; ++i) {
+        struct sc_ui_widget_circle_button widget =
+            sc_ui_touchmap_make_button_widget(tm, &map->buttons[i], i);
+        result = sc_ui_widget_circle_button_handle_event(&widget, ui,
+                                                         &tm->layer, event);
+        if (result.input.consumed) {
+            *out_index = i;
+            return result;
+        }
+    }
+
+    return result;
+}
+
+static struct sc_ui_button_result
+sc_ui_touchmap_layer_handle_walk_widget_event(
+        struct sc_ui_touchmap_layer *tm, struct sc_ui_context *ui,
+        const struct sc_ui_event *event) {
+    struct sc_ui_button_result result = {
+        .input = {false, false},
+        .action = SC_UI_BUTTON_ACTION_NONE,
+    };
+
+    struct sc_gptm_gamepad_touchmap *map = tm->touchmap_state->map;
+    if (!map || !map->has_walk || map->walk.radius <= 0) {
+        return result;
+    }
+
+    struct sc_ui_widget_circle_button widget =
+        sc_ui_touchmap_make_walk_widget(tm, &map->walk);
+    return sc_ui_widget_circle_button_handle_event(&widget, ui, &tm->layer,
+                                                   event);
+}
+
+static void
+sc_ui_touchmap_layer_handle_widget_release(
+        struct sc_ui_touchmap_layer *tm, struct sc_ui_context *ui,
+        const struct sc_ui_event *event, struct sc_ui_input_result *result) {
+    int button_index;
+    struct sc_ui_button_result button_result =
+        sc_ui_touchmap_layer_handle_button_widgets_event(
+            tm, ui, event, &button_index);
+    (void) button_index;
+    result->request_refresh |= button_result.input.request_refresh;
+
+    if (button_result.input.consumed) {
+        return;
+    }
+
+    struct sc_ui_button_result walk_result =
+        sc_ui_touchmap_layer_handle_walk_widget_event(tm, ui, event);
+    result->request_refresh |= walk_result.input.request_refresh;
+}
+
+static void
+sc_ui_touchmap_layer_handle_widget_press(
+        struct sc_ui_touchmap_layer *tm, struct sc_ui_context *ui,
+        const struct sc_ui_event *event, struct sc_ui_input_result *result) {
+    int button_index;
+    struct sc_ui_button_result button_result =
+        sc_ui_touchmap_layer_handle_button_widgets_event(
+            tm, ui, event, &button_index);
+    result->request_refresh |= button_result.input.request_refresh;
+
+    if (button_result.action == SC_UI_BUTTON_ACTION_PRESS && button_index >= 0) {
+        sc_touchmap_editor_select_button(&tm->touchmap_state->editor,
+                                         button_index);
+        result->request_refresh = true;
+        return;
+    }
+
+    if (button_result.input.consumed) {
+        return;
+    }
+
+    struct sc_ui_button_result walk_result =
+        sc_ui_touchmap_layer_handle_walk_widget_event(tm, ui, event);
+    result->request_refresh |= walk_result.input.request_refresh;
+    if (walk_result.action == SC_UI_BUTTON_ACTION_PRESS) {
+        sc_touchmap_editor_select_walk(&tm->touchmap_state->editor);
+        result->request_refresh = true;
+    }
+}
+
 static struct sc_ui_input_result
 sc_ui_touchmap_layer_handle_edit_pointer(
-        struct sc_ui_touchmap_layer *tm,
+        struct sc_ui_touchmap_layer *tm, struct sc_ui_context *ui,
         const struct sc_ui_event *event) {
     struct sc_ui_input_result result = {.consumed = true, .request_refresh = false};
     if (event->type == SC_UI_EVENT_POINTER_WHEEL) {
@@ -1046,6 +1078,20 @@ sc_ui_touchmap_layer_handle_edit_pointer(
                                                  })) {
             sc_ui_touchmap_layer_mark_edited(tm, &result);
         }
+        if (!sc_touchmap_editor_is_dragging(&tm->touchmap_state->editor)) {
+            int button_index;
+            struct sc_ui_button_result button_result =
+                sc_ui_touchmap_layer_handle_button_widgets_event(
+                    tm, ui, event, &button_index);
+            (void) button_index;
+            result.request_refresh |= button_result.input.request_refresh;
+            if (!button_result.input.consumed) {
+                struct sc_ui_button_result walk_result =
+                    sc_ui_touchmap_layer_handle_walk_widget_event(
+                        tm, ui, event);
+                result.request_refresh |= walk_result.input.request_refresh;
+            }
+        }
         return result;
     }
 
@@ -1054,7 +1100,11 @@ sc_ui_touchmap_layer_handle_edit_pointer(
     }
 
     if (event->type == SC_UI_EVENT_POINTER_UP) {
-        if (sc_touchmap_editor_is_dragging(&tm->touchmap_state->editor)) {
+        bool was_dragging =
+            sc_touchmap_editor_is_dragging(&tm->touchmap_state->editor);
+        sc_ui_touchmap_layer_handle_widget_release(tm, ui, event, &result);
+
+        if (was_dragging) {
             sc_touchmap_editor_reset_drag(&tm->touchmap_state->editor);
             result.request_refresh = true;
         }
@@ -1074,6 +1124,8 @@ sc_ui_touchmap_layer_handle_edit_pointer(
         result.request_refresh = true;
         return result;
     }
+
+    sc_ui_touchmap_layer_handle_widget_press(tm, ui, event, &result);
 
     sc_touchmap_editor_try_start_drag(&tm->touchmap_state->editor,
                                       tm->touchmap_state->map, point);
@@ -1125,7 +1177,7 @@ sc_ui_touchmap_layer_handle_event(struct sc_ui_layer *layer,
             return result;
         }
 
-        return sc_ui_touchmap_layer_handle_edit_pointer(tm, event);
+        return sc_ui_touchmap_layer_handle_edit_pointer(tm, ui, event);
     }
 
     if (!state->edit_mode) {

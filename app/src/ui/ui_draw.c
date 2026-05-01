@@ -1,8 +1,12 @@
 #include "ui_draw.h"
 
+#include <math.h>
+
 #include <SDL2/SDL.h>
 
 #include "ui_context.h"
+
+#define SC_UI_DRAW_CIRCLE_POINTS 32
 
 static bool
 sc_ui_draw_set_color(SDL_Renderer *renderer, struct sc_ui_color color) {
@@ -46,6 +50,88 @@ sc_ui_draw_rect_border(const struct sc_ui_render_ctx *render_ctx,
     }
 
     return SDL_RenderDrawRect(renderer, &drawable_rect) == 0;
+}
+
+bool
+sc_ui_draw_fill_circle(const struct sc_ui_render_ctx *render_ctx,
+                       struct sc_point center, int32_t radius,
+                       struct sc_ui_color color) {
+    SDL_Renderer *renderer = render_ctx->renderer;
+    struct sc_point drawable_center = center;
+    if (render_ctx->ui) {
+        if (!sc_ui_context_logical_to_drawable_point(render_ctx->ui, center,
+                                                     &drawable_center)) {
+            drawable_center = center;
+        }
+        radius = sc_ui_context_logical_to_drawable_length(render_ctx->ui,
+                                                          radius);
+    }
+
+    if (radius < 1) {
+        radius = 1;
+    }
+
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    if (!sc_ui_draw_set_color(renderer, color)) {
+        return false;
+    }
+
+    for (int32_t y = -radius; y <= radius; ++y) {
+        int32_t x = (int32_t) sqrt((double) radius * radius
+                                   - (double) y * y);
+        if (SDL_RenderDrawLine(renderer, drawable_center.x - x,
+                               drawable_center.y + y,
+                               drawable_center.x + x,
+                               drawable_center.y + y)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool
+sc_ui_draw_circle_outline(const struct sc_ui_render_ctx *render_ctx,
+                          struct sc_point center, int32_t radius,
+                          struct sc_ui_color color, bool dashed) {
+    SDL_Renderer *renderer = render_ctx->renderer;
+    struct sc_point drawable_center = center;
+    if (render_ctx->ui) {
+        if (!sc_ui_context_logical_to_drawable_point(render_ctx->ui, center,
+                                                     &drawable_center)) {
+            drawable_center = center;
+        }
+        radius = sc_ui_context_logical_to_drawable_length(render_ctx->ui,
+                                                          radius);
+    }
+
+    if (radius < 1) {
+        radius = 1;
+    }
+
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    if (!sc_ui_draw_set_color(renderer, color)) {
+        return false;
+    }
+
+    double angle_step = 2.0 * acos(-1.0) / SC_UI_DRAW_CIRCLE_POINTS;
+    for (int i = 0; i < SC_UI_DRAW_CIRCLE_POINTS; ++i) {
+        if (dashed && i % 2) {
+            continue;
+        }
+
+        double angle1 = i * angle_step;
+        double angle2 = (i + 1) * angle_step;
+        int x1 = drawable_center.x + (int) (radius * cos(angle1));
+        int y1 = drawable_center.y + (int) (radius * sin(angle1));
+        int x2 = drawable_center.x + (int) (radius * cos(angle2));
+        int y2 = drawable_center.y + (int) (radius * sin(angle2));
+        if (SDL_RenderDrawLine(renderer, x1, y1, x2, y2)) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 bool

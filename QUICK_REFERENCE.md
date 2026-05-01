@@ -132,7 +132,11 @@ Supported button names include:
 - **State and dialog handling**: `/home/lucd/work/scrcpy/app/src/touchmap/touchmap_state.{c,h}`
 - **Runtime gamepad-to-touch**: `/home/lucd/work/scrcpy/app/src/touchmap/touchmap_runtime.{c,h}`
 - **Editor logic**: `/home/lucd/work/scrcpy/app/src/touchmap/touchmap_editor.{c,h}`
+- **Auto-loader (package-indexed)**: `/home/lucd/work/scrcpy/app/src/touchmap/touchmap_loader.{c,h}`
 - **Overlay rendering**: `/home/lucd/work/scrcpy/app/src/touchmap/ui_touchmap_layer.{c,h}`
+- **Overlay coordinate transforms**: `/home/lucd/work/scrcpy/app/src/touchmap/touchmap_overlay.{c,h}`
+- **Shared circle drawing**: `/home/lucd/work/scrcpy/app/src/ui/ui_draw.{c,h}`
+- **Circle widget**: `/home/lucd/work/scrcpy/app/src/ui/ui_widget_circle_button.{c,h}`
 - **Input integration and shortcuts**: `/home/lucd/work/scrcpy/app/src/input_manager.c`
 - **Display integration**: `/home/lucd/work/scrcpy/app/src/display.{c,h}`
 - **Maintained design doc**: `/home/lucd/work/scrcpy/TOUCHMAP.md`
@@ -177,12 +181,16 @@ Supported button names include:
 - `sc_touchmap_editor_try_start_drag()` - Edit-mode hit testing
 - `sc_gptm_gamepad_touchmap_add_button()` - Append button/skill mapping
 - `sc_gptm_gamepad_touchmap_bind_button()` - Bind or rebind selected mapping
+- `sc_ui_widget_circle_button_render()` - Render a circle widget (used by overlay)
+- `sc_ui_draw_fill_circle()` - Draw a filled circle with coordinate conversion
+- `sc_ui_draw_circle_outline()` - Draw a circle outline (solid or dashed)
+- `sc_touchmap_loader_find_path()` - Find touchmap path for package name
 
 ### Architecture
 ```
 Gamepad input → input_manager → touchmap lookup → virtual Android touch events
-                         ↓
-                  overlay/editor UI
+                          ↓
+                   overlay/editor UI (via ui_widget_circle_button)
 ```
 
 ---
