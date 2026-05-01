@@ -79,6 +79,8 @@ sc_ui_widget_button_init(struct sc_ui_widget_button *button, sc_ui_id id,
     button->label = label;
     button->enabled = true;
     button->style = *style;
+    button->handler = NULL;
+    button->handler_userdata = NULL;
 }
 
 void
@@ -178,8 +180,15 @@ sc_ui_widget_button_handle_event(struct sc_ui_widget_button *button,
         return result;
     }
 
-    return sc_ui_button_handle_event(&button->state, ui, layer, &button->rect,
-                                     event);
+    struct sc_ui_button_result result =
+        sc_ui_button_handle_event(&button->state, ui, layer, &button->rect,
+                                  event);
+
+    if (result.action == SC_UI_BUTTON_ACTION_CLICK && button->handler) {
+        button->handler(button->handler_userdata, &result.input);
+    }
+
+    return result;
 }
 
 bool

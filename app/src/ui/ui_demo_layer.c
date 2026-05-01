@@ -62,12 +62,12 @@ sc_ui_demo_layer_action_second(void *userdata,
 
 static bool
 sc_ui_demo_layer_has_rect(const struct sc_ui_geometry *geometry,
-                          const struct sc_ui_widget_action_button *primary,
+                          const struct sc_ui_widget_button *primary,
                           const struct sc_ui_widget_action_menu *action_menu) {
     struct sc_size logical_size = sc_ui_geom_get_logical_size(geometry);
-    int32_t width = primary->button.rect.w + SC_UI_DEMO_MARGIN
+    int32_t width = primary->rect.w + SC_UI_DEMO_MARGIN
                   + action_menu->toolbar_panel.rect.w;
-    int32_t height = primary->button.rect.h;
+    int32_t height = primary->rect.h;
     if (action_menu->toolbar_panel.rect.h > height) {
         height = action_menu->toolbar_panel.rect.h;
     }
@@ -83,16 +83,18 @@ sc_ui_demo_layer_sync(struct sc_ui_layer *layer, struct sc_ui_context *ui) {
     const struct sc_ui_geometry *geometry = sc_ui_context_get_geometry(ui);
     struct sc_size logical_size = sc_ui_geom_get_logical_size(geometry);
 
-    sc_ui_widget_action_button_apply_variant(&demo->primary_button,
-                                             SC_UI_WIDGET_BUTTON_VARIANT_SUCCESS);
-    demo->primary_button.margin = SC_UI_DEMO_MARGIN;
-    sc_ui_widget_action_button_set_label_and_layout_top_right(
-        &demo->primary_button, sc_ui_demo_layer_get_primary_label(demo),
+    sc_ui_widget_button_apply_variant(&demo->primary_button,
+                                      SC_UI_WIDGET_BUTTON_VARIANT_SUCCESS);
+    sc_ui_widget_button_set_label(&demo->primary_button,
+                                  sc_ui_demo_layer_get_primary_label(demo));
+    sc_ui_widget_button_fit_to_content(&demo->primary_button);
+    sc_ui_widget_button_place_top_right(&demo->primary_button,
         (struct sc_size) {
             .width = logical_size.width - demo->action_menu.toolbar_panel.rect.w
                    - SC_UI_DEMO_MARGIN,
             .height = logical_size.height,
-        });
+        },
+        SC_UI_DEMO_MARGIN);
 
     sc_ui_widget_button_apply_variant(&demo->secondary_button,
                                       SC_UI_WIDGET_BUTTON_VARIANT_DANGER);
@@ -130,7 +132,7 @@ sc_ui_demo_layer_handle_event(struct sc_ui_layer *layer,
     struct sc_ui_input_result result = {false, false};
     if (!sc_ui_demo_layer_has_rect(geometry, &demo->primary_button,
                                    &demo->action_menu)) {
-        sc_ui_widget_button_reset(&demo->primary_button.button, ui, layer);
+        sc_ui_widget_button_reset(&demo->primary_button, ui, layer);
         sc_ui_widget_button_reset(&demo->secondary_button, ui, layer);
         sc_ui_widget_button_reset(&demo->menu_item_one, ui, layer);
         sc_ui_widget_button_reset(&demo->menu_item_two, ui, layer);
@@ -145,7 +147,7 @@ sc_ui_demo_layer_handle_event(struct sc_ui_layer *layer,
     if (!result.consumed && demo->menu_open && menu_result.clicked_outside
             && !sc_ui_geom_point_in_rect(event->data.pointer.x,
                                          event->data.pointer.y,
-                                         &demo->primary_button.button.rect)) {
+                                         &demo->primary_button.rect)) {
         demo->menu_open = false;
         result.request_refresh = true;
     }
@@ -153,8 +155,10 @@ sc_ui_demo_layer_handle_event(struct sc_ui_layer *layer,
         return result;
     }
 
-    result = sc_ui_widget_action_button_handle_event(&demo->primary_button, ui,
-                                                     layer, event);
+    struct sc_ui_button_result primary_result =
+        sc_ui_widget_button_handle_event(&demo->primary_button, ui,
+                                         layer, event);
+    result = primary_result.input;
     return result;
 }
 
@@ -168,8 +172,7 @@ sc_ui_demo_layer_render(struct sc_ui_layer *layer,
         return true;
     }
 
-    bool ok = sc_ui_widget_action_button_render(&demo->primary_button,
-                                                render_ctx);
+    bool ok = sc_ui_widget_button_render(&demo->primary_button, render_ctx);
     ok &= sc_ui_widget_action_menu_render(&demo->action_menu, render_ctx,
                                           demo->menu_open);
     if (demo->menu_open) {
@@ -184,8 +187,8 @@ sc_ui_demo_layer_on_detach(struct sc_ui_layer *layer,
                            struct sc_ui_context *ui) {
     (void) ui;
     struct sc_ui_demo_layer *demo = layer->userdata;
-    demo->primary_button.button.state.hovered = false;
-    demo->primary_button.button.state.pressed = false;
+    demo->primary_button.state.hovered = false;
+    demo->primary_button.state.pressed = false;
     demo->secondary_button.state.hovered = false;
     demo->secondary_button.state.pressed = false;
     demo->menu_item_one.state.hovered = false;
@@ -212,35 +215,37 @@ sc_ui_demo_layer_init(struct sc_ui_demo_layer *demo) {
         .userdata = demo,
     };
 
-    sc_ui_widget_action_button_init(&demo->primary_button,
-                                    sc_ui_id_from_u32(demo, 1), "DEMO",
-                                    sc_ui_demo_layer_action_primary, demo);
+    sc_ui_widget_button_init_default(&demo->primary_button,
+                                     sc_ui_id_from_u32(demo, 1), "DEMO");
+    demo->primary_button.handler = sc_ui_demo_layer_action_primary;
+    demo->primary_button.handler_userdata = demo;
 
     sc_ui_widget_button_init_default(&demo->secondary_button,
                                      sc_ui_id_from_u32(demo, 2), "PING");
+    demo->secondary_button.handler = sc_ui_demo_layer_action_secondary;
+    demo->secondary_button.handler_userdata = demo;
+
     sc_ui_widget_button_init_default(&demo->menu_item_one,
                                      sc_ui_id_from_u32(demo, 3), "FIRST");
+    demo->menu_item_one.handler = sc_ui_demo_layer_action_first;
+    demo->menu_item_one.handler_userdata = demo;
+
     sc_ui_widget_button_init_default(&demo->menu_item_two,
                                      sc_ui_id_from_u32(demo, 4), "SECOND");
+    demo->menu_item_two.handler = sc_ui_demo_layer_action_second;
+    demo->menu_item_two.handler_userdata = demo;
 
     struct sc_ui_widget_button *toolbar_buttons[] = {
         &demo->secondary_button,
-    };
-    static const sc_ui_widget_action_handler toolbar_actions[] = {
-        sc_ui_demo_layer_action_secondary,
     };
     struct sc_ui_widget_button *menu_buttons[] = {
         &demo->menu_item_one,
         &demo->menu_item_two,
     };
-    static const sc_ui_widget_action_handler menu_actions[] = {
-        sc_ui_demo_layer_action_first,
-        sc_ui_demo_layer_action_second,
-    };
     sc_ui_widget_action_menu_init(&demo->action_menu, toolbar_buttons,
-                                  ARRAY_LEN(toolbar_buttons), toolbar_actions,
+                                  ARRAY_LEN(toolbar_buttons),
                                   menu_buttons, ARRAY_LEN(menu_buttons),
-                                  menu_actions, demo);
+                                  demo);
     sc_ui_widget_action_menu_set_menu_layout_count(&demo->action_menu, 4);
     sc_ui_widget_action_menu_set_menu_button_slot(&demo->action_menu, 0, 1);
     sc_ui_widget_action_menu_set_menu_button_slot(&demo->action_menu, 1, 3);

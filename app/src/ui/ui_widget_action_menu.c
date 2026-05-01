@@ -37,10 +37,8 @@ void
 sc_ui_widget_action_menu_init(struct sc_ui_widget_action_menu *action_menu,
                               struct sc_ui_widget_button **toolbar_buttons,
                               size_t toolbar_button_count,
-                              const sc_ui_widget_action_handler *toolbar_actions,
                               struct sc_ui_widget_button **menu_buttons,
                               size_t menu_button_count,
-                              const sc_ui_widget_action_handler *menu_actions,
                               void *userdata) {
     sc_ui_widget_panel_init_default(&action_menu->toolbar_panel);
     sc_ui_widget_menu_init_default(&action_menu->menu);
@@ -50,11 +48,9 @@ sc_ui_widget_action_menu_init(struct sc_ui_widget_action_menu *action_menu,
     action_menu->menu_button_count = menu_button_count;
     for (size_t i = 0; i < toolbar_button_count; ++i) {
         action_menu->toolbar_buttons[i] = toolbar_buttons[i];
-        action_menu->toolbar_actions[i] = toolbar_actions[i];
     }
     for (size_t i = 0; i < menu_button_count; ++i) {
         action_menu->menu_buttons[i] = menu_buttons[i];
-        action_menu->menu_actions[i] = menu_actions[i];
         action_menu->menu_button_slots[i] = (int) i;
     }
     action_menu->userdata = userdata;
@@ -204,10 +200,6 @@ sc_ui_widget_action_menu_handle_event(
                                              ui, layer, event);
         result.input = button_result.input;
         if (button_result.action == SC_UI_BUTTON_ACTION_CLICK) {
-            if (action_menu->toolbar_actions[i]) {
-                action_menu->toolbar_actions[i](action_menu->userdata,
-                                                &result.input);
-            }
             return result;
         }
         if (result.input.consumed) {
@@ -229,10 +221,6 @@ sc_ui_widget_action_menu_handle_event(
             sc_ui_widget_button_handle_event(button, ui, layer, event);
         result.input = button_result.input;
         if (button_result.action == SC_UI_BUTTON_ACTION_CLICK) {
-            if (action_menu->menu_actions[i]) {
-                action_menu->menu_actions[i](action_menu->userdata,
-                                             &result.input);
-            }
             return result;
         }
         if (result.input.consumed) {

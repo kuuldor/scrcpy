@@ -7,7 +7,6 @@
 #include <stddef.h>
 
 #include "coords.h"
-#include "ui_widget_action_button.h"
 #include "ui_widget_button.h"
 #include "ui_widget_menu.h"
 #include "ui_widget_panel.h"
@@ -22,10 +21,8 @@ struct sc_ui_widget_action_menu {
     struct sc_ui_widget_panel toolbar_panel;
     struct sc_ui_widget_menu menu;
     struct sc_ui_widget_button *toolbar_buttons[SC_UI_WIDGET_ACTION_MENU_MAX_BUTTONS];
-    sc_ui_widget_action_handler toolbar_actions[SC_UI_WIDGET_ACTION_MENU_MAX_BUTTONS];
     size_t toolbar_button_count;
     struct sc_ui_widget_button *menu_buttons[SC_UI_WIDGET_ACTION_MENU_MAX_BUTTONS];
-    sc_ui_widget_action_handler menu_actions[SC_UI_WIDGET_ACTION_MENU_MAX_BUTTONS];
     int menu_button_slots[SC_UI_WIDGET_ACTION_MENU_MAX_BUTTONS];
     size_t menu_button_count;
     size_t menu_layout_count;
@@ -40,10 +37,8 @@ void
 sc_ui_widget_action_menu_init(struct sc_ui_widget_action_menu *action_menu,
                               struct sc_ui_widget_button **toolbar_buttons,
                               size_t toolbar_button_count,
-                              const sc_ui_widget_action_handler *toolbar_actions,
                               struct sc_ui_widget_button **menu_buttons,
                               size_t menu_button_count,
-                              const sc_ui_widget_action_handler *menu_actions,
                               void *userdata);
 
 void

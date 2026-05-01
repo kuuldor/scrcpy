@@ -808,12 +808,12 @@ sc_ui_touchmap_layer_sync_layout(struct sc_ui_touchmap_layer *tm,
     };
 
     const char *edit_label = sc_ui_touchmap_layer_get_edit_label(state);
-    sc_ui_widget_action_button_apply_variant(&tm->edit_button,
-                                             SC_UI_WIDGET_BUTTON_VARIANT_SUCCESS);
-    tm->edit_button.margin = SC_UI_TOUCHMAP_EDIT_MARGIN;
-    sc_ui_widget_action_button_set_label_and_layout_top_right(&tm->edit_button,
-                                                              edit_label,
-                                                              logical_size);
+    sc_ui_widget_button_apply_variant(&tm->edit_button,
+                                      SC_UI_WIDGET_BUTTON_VARIANT_SUCCESS);
+    sc_ui_widget_button_set_label(&tm->edit_button, edit_label);
+    sc_ui_widget_button_fit_to_content(&tm->edit_button);
+    sc_ui_widget_button_place_top_right(&tm->edit_button, logical_size,
+                                        SC_UI_TOUCHMAP_EDIT_MARGIN);
 
     sc_ui_widget_action_menu_apply_variants(&tm->action_menu,
                                             toolbar_variants,
@@ -1181,8 +1181,10 @@ sc_ui_touchmap_layer_handle_event(struct sc_ui_layer *layer,
     }
 
     if (!state->edit_mode) {
-        result = sc_ui_widget_action_button_handle_event(&tm->edit_button, ui,
-                                                         layer, event);
+        struct sc_ui_button_result button_result =
+            sc_ui_widget_button_handle_event(&tm->edit_button, ui,
+                                             layer, event);
+        result = button_result.input;
     }
 
     return result;
@@ -1204,7 +1206,7 @@ sc_ui_touchmap_layer_render(struct sc_ui_layer *layer,
         ok &= sc_ui_widget_action_menu_render(&tm->action_menu, render_ctx,
                                               state->add_menu_open);
     } else {
-        ok &= sc_ui_widget_action_button_render(&tm->edit_button, render_ctx);
+        ok &= sc_ui_widget_button_render(&tm->edit_button, render_ctx);
     }
 
     return ok;
@@ -1231,46 +1233,49 @@ sc_ui_touchmap_layer_init(struct sc_ui_touchmap_layer *layer,
         .userdata = layer,
     };
 
-    sc_ui_widget_action_button_init(&layer->edit_button,
-                                    sc_ui_id_from_u32(layer, 0), "EDIT",
-                                    sc_ui_touchmap_layer_action_edit, layer);
+    sc_ui_widget_button_init_default(&layer->edit_button,
+                                     sc_ui_id_from_u32(layer, 0), "EDIT");
+    layer->edit_button.handler = sc_ui_touchmap_layer_action_edit;
+    layer->edit_button.handler_userdata = layer;
 
     sc_ui_widget_button_init_default(&layer->toolbar_buttons[0],
                                      sc_ui_id_from_u32(layer, 1), "ADD");
+    layer->toolbar_buttons[0].handler = sc_ui_touchmap_layer_action_menu_toggle;
+    layer->toolbar_buttons[0].handler_userdata = layer;
     sc_ui_widget_button_init_default(&layer->toolbar_buttons[1],
                                      sc_ui_id_from_u32(layer, 2), "DEL");
+    layer->toolbar_buttons[1].handler = sc_ui_touchmap_layer_action_delete;
+    layer->toolbar_buttons[1].handler_userdata = layer;
     sc_ui_widget_button_init_default(&layer->toolbar_buttons[2],
                                      sc_ui_id_from_u32(layer, 3), "QUIT");
+    layer->toolbar_buttons[2].handler = sc_ui_touchmap_layer_action_quit;
+    layer->toolbar_buttons[2].handler_userdata = layer;
 
     sc_ui_widget_button_init_default(&layer->add_menu_items[0],
                                      sc_ui_id_from_u32(layer, 4), "BUTTON");
+    layer->add_menu_items[0].handler = sc_ui_touchmap_layer_action_add_button;
+    layer->add_menu_items[0].handler_userdata = layer;
     sc_ui_widget_button_init_default(&layer->add_menu_items[1],
                                      sc_ui_id_from_u32(layer, 5), "SKILL");
+    layer->add_menu_items[1].handler = sc_ui_touchmap_layer_action_add_skill;
+    layer->add_menu_items[1].handler_userdata = layer;
     sc_ui_widget_button_init_default(&layer->add_menu_items[2],
                                      sc_ui_id_from_u32(layer, 6), "WALK");
+    layer->add_menu_items[2].handler = sc_ui_touchmap_layer_action_add_walk;
+    layer->add_menu_items[2].handler_userdata = layer;
 
     struct sc_ui_widget_button *toolbar_buttons[] = {
         &layer->toolbar_buttons[0],
         &layer->toolbar_buttons[1],
         &layer->toolbar_buttons[2],
     };
-    static const sc_ui_widget_action_handler toolbar_actions[] = {
-        sc_ui_touchmap_layer_action_menu_toggle,
-        sc_ui_touchmap_layer_action_delete,
-        sc_ui_touchmap_layer_action_quit,
-    };
     struct sc_ui_widget_button *menu_buttons[] = {
         &layer->add_menu_items[0],
         &layer->add_menu_items[1],
         &layer->add_menu_items[2],
     };
-    static const sc_ui_widget_action_handler menu_actions[] = {
-        sc_ui_touchmap_layer_action_add_button,
-        sc_ui_touchmap_layer_action_add_skill,
-        sc_ui_touchmap_layer_action_add_walk,
-    };
     sc_ui_widget_action_menu_init(&layer->action_menu, toolbar_buttons,
-                                  ARRAY_LEN(toolbar_buttons), toolbar_actions,
+                                  ARRAY_LEN(toolbar_buttons),
                                   menu_buttons, ARRAY_LEN(menu_buttons),
-                                  menu_actions, layer);
+                                  layer);
 }

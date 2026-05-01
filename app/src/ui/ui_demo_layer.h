@@ -6,14 +6,14 @@
 #include <stdbool.h>
 
 #include "ui_layer.h"
-#include "ui_widget_action_button.h"
+#include "ui_widget_button.h"
 #include "ui_widget_action_menu.h"
 #include "ui_widget_label.h"
 #include "ui_widget_separator.h"
 
 struct sc_ui_demo_layer {
     struct sc_ui_layer layer;
-    struct sc_ui_widget_action_button primary_button;
+    struct sc_ui_widget_button primary_button;
     struct sc_ui_widget_action_menu action_menu;
     struct sc_ui_widget_button secondary_button;
     struct sc_ui_widget_label menu_label;

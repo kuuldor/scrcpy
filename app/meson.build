@@ -46,7 +46,6 @@ src = [
     'src/ui/ui_demo_layer.c',
     'src/ui/ui_draw.c',
     'src/ui/ui_text.c',
-    'src/ui/ui_widget_action_button.c',
     'src/ui/ui_widget_action_menu.c',
     'src/ui/ui_widget_button.c',
     'src/ui/ui_widget_circle_button.c',

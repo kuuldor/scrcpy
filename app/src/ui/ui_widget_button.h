@@ -9,6 +9,11 @@
 #include "ui_draw.h"
 #include "ui_text.h"
 
+struct sc_ui_input_result;
+
+typedef void (*sc_ui_widget_button_handler)(void *userdata,
+                                            struct sc_ui_input_result *result);
+
 struct sc_ui_widget_button_style {
     struct sc_ui_color fill_color;
     struct sc_ui_color fill_hover_color;
@@ -35,6 +40,8 @@ struct sc_ui_widget_button {
     const char *label;
     bool enabled;
     struct sc_ui_widget_button_style style;
+    sc_ui_widget_button_handler handler;
+    void *handler_userdata;
 };
 
 struct sc_ui_widget_button_style
