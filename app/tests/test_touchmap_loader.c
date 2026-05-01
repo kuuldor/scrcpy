@@ -9,8 +9,8 @@
 
 #include <SDL2/SDL.h>
 
-#include "touchmap.h"
-#include "touchmap_loader.h"
+#include "touchmap/touchmap.h"
+#include "touchmap/touchmap_loader.h"
 
 static bool
 write_file(const char *path, const char *content) {

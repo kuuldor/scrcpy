@@ -2,7 +2,55 @@
 
 #include <assert.h>
 
-#include "touchmap_state.h"
+#include "events.h"
+#include "third_party/tfd/tinyfiledialogs.h"
+#include "touchmap/touchmap_state.h"
+
+bool
+sc_push_event_impl(uint32_t type, const char *name) {
+    (void) type;
+    (void) name;
+    return true;
+}
+
+int
+tinyfd_messageBox(char const *title, char const *message,
+                  char const *dialog_type, char const *icon_type,
+                  int default_button) {
+    (void) title;
+    (void) message;
+    (void) dialog_type;
+    (void) icon_type;
+    return default_button;
+}
+
+char *
+tinyfd_saveFileDialog(char const *title, char const *default_path_and_or_file,
+                      int num_filter_patterns,
+                      char const *const *filter_patterns,
+                      char const *single_filter_description) {
+    (void) title;
+    (void) default_path_and_or_file;
+    (void) num_filter_patterns;
+    (void) filter_patterns;
+    (void) single_filter_description;
+    return NULL;
+}
+
+char *
+tinyfd_openFileDialog(char const *title, char const *default_path_and_or_file,
+                      int num_filter_patterns,
+                      char const *const *filter_patterns,
+                      char const *single_filter_description,
+                      int allow_multiple_selects) {
+    (void) title;
+    (void) default_path_and_or_file;
+    (void) num_filter_patterns;
+    (void) filter_patterns;
+    (void) single_filter_description;
+    (void) allow_multiple_selects;
+    return NULL;
+}
 
 static void
 test_touchmap_state_fg_change_load(void) {

@@ -9,9 +9,9 @@
 
 #include "options.h"
 #include "third_party/cjson/cJSON.h"
-#include "touchmap.h"
-#include "touchmap_editor.h"
-#include "touchmap_overlay.h"
+#include "touchmap/touchmap.h"
+#include "touchmap/touchmap_editor.h"
+#include "touchmap/touchmap_overlay.h"
 
 static bool
 write_file(const char *path, const char *content) {
@@ -360,7 +360,7 @@ test_touchmap_mutation_helpers(void) {
     assert(map->has_walk);
     assert(map->walk.center.x == 100);
     assert(map->walk.center.y == 200);
-    assert(map->walk.radius == SC_TOUCHMAP_MIN_RADIUS);
+    assert(map->walk.radius == SC_TOUCHMAP_WALK_RADIUS);
     assert(map->walk.finger_id == SC_GPTM_BASE_FINGER_ID);
 
     assert(sc_gptm_gamepad_touchmap_remove_walk(map));
@@ -527,21 +527,11 @@ test_editor_keyboard_nudging(void) {
     assert(sc_touchmap_editor_get_mode(&editor)
            == SC_TOUCHMAP_EDITOR_MODE_SELECT);
 
-    sc_touchmap_editor_set_mode(&editor,
-                                SC_TOUCHMAP_EDITOR_MODE_PLACE_BUTTON);
-    assert(sc_touchmap_editor_get_mode(&editor)
-           == SC_TOUCHMAP_EDITOR_MODE_PLACE_BUTTON);
-    assert(!sc_touchmap_editor_try_start_drag(
-        &editor, map, (struct sc_point) {300, 400}));
     sc_touchmap_editor_set_mode(&editor, SC_TOUCHMAP_EDITOR_MODE_ADD_MENU);
     assert(sc_touchmap_editor_get_mode(&editor)
            == SC_TOUCHMAP_EDITOR_MODE_ADD_MENU);
-    sc_touchmap_editor_set_mode(&editor, SC_TOUCHMAP_EDITOR_MODE_PLACE_SKILL);
-    assert(sc_touchmap_editor_get_mode(&editor)
-           == SC_TOUCHMAP_EDITOR_MODE_PLACE_SKILL);
-    sc_touchmap_editor_set_mode(&editor, SC_TOUCHMAP_EDITOR_MODE_PLACE_WALK);
-    assert(sc_touchmap_editor_get_mode(&editor)
-           == SC_TOUCHMAP_EDITOR_MODE_PLACE_WALK);
+    assert(!sc_touchmap_editor_try_start_drag(
+        &editor, map, (struct sc_point) {300, 400}));
     sc_touchmap_editor_set_mode(&editor, SC_TOUCHMAP_EDITOR_MODE_SELECT);
 
     assert(!sc_touchmap_editor_nudge_selection(&editor, map, 1, 0, 1));
@@ -559,7 +549,7 @@ test_editor_keyboard_nudging(void) {
     assert(sc_touchmap_editor_nudge_selection(&editor, map, 0, -1, 10));
     assert(map->walk.radius == 50);
     assert(sc_touchmap_editor_nudge_selection(&editor, map, 0, 1, -100));
-    assert(map->walk.radius == SC_TOUCHMAP_MIN_RADIUS);
+    assert(map->walk.radius == SC_TOUCHMAP_WALK_RADIUS);
     assert(!sc_touchmap_editor_nudge_selection(&editor, map, 0, 1, -1));
 
     editor.selection.target = SC_TOUCHMAP_EDITOR_TARGET_BUTTON_CENTER;
