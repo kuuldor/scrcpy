@@ -735,9 +735,8 @@ sc_ui_touchmap_layer_action_edit(void *userdata,
     struct sc_ui_touchmap_layer *tm = userdata;
     if (!tm->touchmap_state->map) {
         sc_touchmap_state_create_empty(tm->touchmap_state);
-    } else {
-        sc_touchmap_state_enter_edit_mode(tm->touchmap_state);
     }
+    sc_touchmap_state_enter_edit_mode(tm->touchmap_state);
     result->request_refresh = true;
 }
 
