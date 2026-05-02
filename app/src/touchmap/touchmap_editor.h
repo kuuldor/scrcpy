@@ -6,7 +6,7 @@
 #include <stdbool.h>
 
 #include "coords.h"
-#include "touchmap.h"
+#include "touchmap/touchmap.h"
 
 enum sc_touchmap_editor_target {
     SC_TOUCHMAP_EDITOR_TARGET_NONE,
@@ -19,9 +19,6 @@ enum sc_touchmap_editor_target {
 enum sc_touchmap_editor_mode {
     SC_TOUCHMAP_EDITOR_MODE_SELECT,
     SC_TOUCHMAP_EDITOR_MODE_ADD_MENU,
-    SC_TOUCHMAP_EDITOR_MODE_PLACE_BUTTON,
-    SC_TOUCHMAP_EDITOR_MODE_PLACE_SKILL,
-    SC_TOUCHMAP_EDITOR_MODE_PLACE_WALK,
 };
 
 struct sc_touchmap_editor_selection {
@@ -83,8 +80,12 @@ sc_touchmap_editor_apply_drag(struct sc_touchmap_editor *editor,
 
 bool
 sc_touchmap_editor_nudge_selection(struct sc_touchmap_editor *editor,
-                                   struct sc_gptm_gamepad_touchmap *map,
-                                   int32_t dx, int32_t dy,
-                                   int32_t radius_delta);
+                                 struct sc_gptm_gamepad_touchmap *map,
+                                 int32_t dx, int32_t dy,
+                                 int32_t radius_delta);
+
+bool
+sc_touchmap_editor_delete_selected(struct sc_touchmap_editor *editor,
+                                 struct sc_gptm_gamepad_touchmap **map);
 
 #endif

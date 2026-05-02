@@ -1,4 +1,4 @@
-#include "touchmap_editor.h"
+#include "touchmap/touchmap_editor.h"
 
 #include <math.h>
 #include <stdlib.h>
@@ -134,8 +134,9 @@ sc_touchmap_editor_try_start_drag(struct sc_touchmap_editor *editor,
         return false;
     }
 
-    int32_t min_radius = SC_TOUCHMAP_MIN_RADIUS;
-    int32_t radius_threshold = min_radius / 4;
+    int32_t button_radius = SC_TOUCHMAP_BUTTON_RADIUS;
+    int32_t walk_radius = SC_TOUCHMAP_WALK_RADIUS;
+    int32_t radius_threshold = button_radius / 4;
 
     if (map->has_walk) {
         if (sc_touchmap_editor_hit_test_radius(&map->walk.center,
@@ -146,7 +147,7 @@ sc_touchmap_editor_try_start_drag(struct sc_touchmap_editor *editor,
             return true;
         }
 
-        if (sc_touchmap_editor_hit_test_center(&map->walk.center, min_radius,
+        if (sc_touchmap_editor_hit_test_center(&map->walk.center, walk_radius,
                                                point)) {
             sc_touchmap_editor_start_drag(
                 editor, SC_TOUCHMAP_EDITOR_TARGET_WALK_CENTER, -1);
@@ -156,7 +157,7 @@ sc_touchmap_editor_try_start_drag(struct sc_touchmap_editor *editor,
 
     for (int i = 0; i < map->button_cnt; ++i) {
         const struct sc_gptm_touch_button *btn = &map->buttons[i];
-        int32_t radius = btn->radius > 0 ? btn->radius : min_radius;
+        int32_t radius = btn->radius > 0 ? btn->radius : button_radius;
 
         if (sc_touchmap_editor_is_skill_button(btn)
                 && sc_touchmap_editor_hit_test_radius(&btn->center, radius,
@@ -168,18 +169,10 @@ sc_touchmap_editor_try_start_drag(struct sc_touchmap_editor *editor,
             return true;
         }
 
-        if (sc_touchmap_editor_hit_test_center(&btn->center, min_radius,
+        if (sc_touchmap_editor_hit_test_center(&btn->center, button_radius,
                                                point)) {
             sc_touchmap_editor_start_drag(editor,
                                           SC_TOUCHMAP_EDITOR_TARGET_BUTTON_CENTER,
-                                          i);
-            return true;
-        }
-
-        if (sc_touchmap_editor_hit_test_radius(&btn->center, radius, point,
-                                               radius_threshold)) {
-            sc_touchmap_editor_start_drag(editor,
-                                          SC_TOUCHMAP_EDITOR_TARGET_BUTTON_RADIUS,
                                           i);
             return true;
         }
@@ -220,7 +213,6 @@ static bool
 sc_touchmap_editor_apply_radius_drag(struct sc_touchmap_editor *editor,
                                      struct sc_gptm_gamepad_touchmap *map,
                                      struct sc_point point) {
-    int32_t min_radius = SC_TOUCHMAP_MIN_RADIUS;
     switch (editor->drag.target) {
         case SC_TOUCHMAP_EDITOR_TARGET_WALK_RADIUS: {
             if (!map->has_walk) {
@@ -231,7 +223,8 @@ sc_touchmap_editor_apply_radius_drag(struct sc_touchmap_editor *editor,
             int32_t dy = point.y - center.y;
             int32_t radius = (int32_t) sqrt((double) dx * dx
                                             + (double) dy * dy);
-            map->walk.radius = radius > min_radius ? radius : min_radius;
+            map->walk.radius = radius > SC_TOUCHMAP_WALK_RADIUS
+                             ? radius : SC_TOUCHMAP_WALK_RADIUS;
             return true;
         }
         case SC_TOUCHMAP_EDITOR_TARGET_BUTTON_RADIUS:
@@ -243,7 +236,8 @@ sc_touchmap_editor_apply_radius_drag(struct sc_touchmap_editor *editor,
                 int32_t dy = point.y - center.y;
                 int32_t radius = (int32_t) sqrt((double) dx * dx
                                                 + (double) dy * dy);
-                btn->radius = radius > min_radius ? radius : min_radius;
+                btn->radius = radius > SC_TOUCHMAP_BUTTON_RADIUS
+                            ? radius : SC_TOUCHMAP_BUTTON_RADIUS;
                 return true;
             }
             break;
@@ -316,8 +310,8 @@ sc_touchmap_editor_nudge_selection(struct sc_touchmap_editor *editor,
                 return false;
             }
             int32_t radius = map->walk.radius + radius_delta;
-            if (radius < SC_TOUCHMAP_MIN_RADIUS) {
-                radius = SC_TOUCHMAP_MIN_RADIUS;
+            if (radius < SC_TOUCHMAP_WALK_RADIUS) {
+                radius = SC_TOUCHMAP_WALK_RADIUS;
             }
             if (radius == map->walk.radius) {
                 return false;
@@ -336,16 +330,49 @@ sc_touchmap_editor_nudge_selection(struct sc_touchmap_editor *editor,
                 return false;
             }
             int32_t radius = btn->radius + radius_delta;
-            if (radius < SC_TOUCHMAP_MIN_RADIUS) {
-                radius = SC_TOUCHMAP_MIN_RADIUS;
+            if (radius < SC_TOUCHMAP_BUTTON_RADIUS) {
+                radius = SC_TOUCHMAP_BUTTON_RADIUS;
             }
             if (radius == btn->radius) {
                 return false;
             }
-            btn->radius = radius;
+btn->radius = radius;
             return true;
         }
+
         default:
             return false;
     }
+}
+
+bool
+sc_touchmap_editor_delete_selected(struct sc_touchmap_editor *editor,
+                                    struct sc_gptm_gamepad_touchmap **map) {
+    struct sc_touchmap_editor_selection selection = editor->selection;
+    if (!*map) {
+        return false;
+    }
+
+    if (selection.target == SC_TOUCHMAP_EDITOR_TARGET_WALK_CENTER
+            || selection.target == SC_TOUCHMAP_EDITOR_TARGET_WALK_RADIUS) {
+        if (sc_gptm_gamepad_touchmap_remove_walk(*map)) {
+            sc_touchmap_editor_clear_selection(editor);
+        }
+        return true;
+    }
+
+    if (selection.target == SC_TOUCHMAP_EDITOR_TARGET_BUTTON_CENTER
+            || selection.target == SC_TOUCHMAP_EDITOR_TARGET_BUTTON_RADIUS) {
+        int old_index = selection.button_index;
+        int new_index = -1;
+        struct sc_gptm_gamepad_touchmap *new_map =
+            sc_gptm_gamepad_touchmap_remove_button(*map, old_index, &new_index);
+        if (new_map) {
+            *map = new_map;
+            sc_touchmap_editor_select_after_button_remove(editor, new_map, new_index);
+        }
+        return true;
+    }
+
+    return true;
 }

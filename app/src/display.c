@@ -5,7 +5,6 @@
 #include <string.h>
 #include <libavutil/pixfmt.h>
 
-#include "touchmap_overlay.h"
 #include "util/log.h"
 
 static bool
@@ -305,7 +304,9 @@ sc_display_update_texture(struct sc_display *display, const AVFrame *frame) {
 enum sc_display_result
 sc_display_render(struct sc_display *display, const SDL_Rect *geometry,
                   enum sc_orientation orientation,
+                  struct sc_ui_context *ui,
                   const struct sc_touchmap_state *touchmap_state) {
+    (void) touchmap_state;
     SDL_RenderClear(display->renderer);
 
     if (display->pending.flags) {
@@ -350,12 +351,12 @@ sc_display_render(struct sc_display *display, const SDL_Rect *geometry,
         }
     }
 
-    // Render the touchmap overlay on top. It may render a NEW control even
-    // when no touchmap is attached yet.
-    if (touchmap_state && touchmap_state->overlay_enabled) {
-        sc_touchmap_overlay_render(display->renderer, touchmap_state,
-                                   &display->frame_size, dstrect,
-                                   orientation);
+    if (ui) {
+        bool ok = sc_ui_context_render(ui, display->renderer);
+        if (!ok) {
+            LOGE("Could not render UI layers");
+            return SC_DISPLAY_RESULT_ERROR;
+        }
     }
 
     SDL_RenderPresent(display->renderer);

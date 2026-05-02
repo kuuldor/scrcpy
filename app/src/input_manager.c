@@ -11,265 +11,10 @@
 #include "input_events.h"
 #include "screen.h"
 #include "shortcut_mod.h"
-#include "util/file.h"
 #include "util/log.h"
 
-#include "touchmap.h"
-#include "touchmap_overlay.h"
-#include "third_party/tfd/tinyfiledialogs.h"
+#include "touchmap/touchmap_runtime.h"
 #include "events.h"
-
-static int save_touchmap_dialog_thread(void *data);
-static void sc_start_thread(const char *name, SDL_ThreadFunction fn, void *data);
-static void create_empty_touchmap(struct sc_input_manager *im);
-static inline void free_up_touchmap(struct sc_input_manager *im);
-static bool sc_touchmap_edit_mode_active(const struct sc_input_manager *im);
-
-static void
-sc_touchmap_request_screen_refresh(struct sc_input_manager *im) {
-    if (im->screen && im->screen->video && im->screen->has_frame) {
-        sc_push_event(SC_EVENT_SCREEN_REFRESH);
-    }
-}
-
-static char *
-sc_touchmap_normalize_existing_path(const char *path) {
-    char *absolute_path = sc_file_get_absolute_path(path);
-    if (!absolute_path) {
-        LOGE("Could not resolve touchmap path: %s", path);
-    }
-    return absolute_path;
-}
-
-static char *
-sc_touchmap_build_save_dialog_default_path(const struct sc_input_manager *im) {
-    if (im->touchmap.file) {
-        return SDL_strdup(im->touchmap.file);
-    }
-
-    const char *package_name = im->touchmap.map
-                             ? sc_gptm_gamepad_touchmap_get_package_name(
-                                   im->touchmap.map)
-                             : NULL;
-    if (!package_name) {
-        return NULL;
-    }
-
-    return sc_touchmap_build_default_filename(package_name);
-}
-
-static bool
-sc_touchmap_path_is_in_auto_dir(const struct sc_input_manager *im,
-                                const char *path) {
-    if (!im->touchmap.dir || !path) {
-        return false;
-    }
-
-    size_t dir_len = SDL_strlen(im->touchmap.dir);
-#ifdef _WIN32
-    if (SDL_strncasecmp(path, im->touchmap.dir, dir_len)) {
-#else
-    if (SDL_strncmp(path, im->touchmap.dir, dir_len)) {
-#endif
-        return false;
-    }
-
-    char next = path[dir_len];
-    return next == '\0' || next == '/' || next == '\\';
-}
-
-static bool
-sc_input_manager_replace_string(char **dst, const char *src) {
-    char *copy = src ? SDL_strdup(src) : NULL;
-    if (src && !copy) {
-        LOG_OOM();
-        return false;
-    }
-
-    SDL_free(*dst);
-    *dst = copy;
-    return true;
-}
-
-static bool
-sc_touchmap_apply_loaded_map(struct sc_input_manager *im,
-                             struct sc_gptm_gamepad_touchmap *map,
-                             const char *touchmap_file) {
-    char *file_dup = touchmap_file ? SDL_strdup(touchmap_file) : NULL;
-    if (touchmap_file && !file_dup) {
-        LOG_OOM();
-        return false;
-    }
-
-    if (im->touchmap.map) {
-        sc_gptm_gamepad_touchmap_destroy(im->touchmap.map);
-    }
-    SDL_free(im->touchmap.file);
-
-    im->touchmap.map = map;
-    im->touchmap.file = file_dup;
-    sc_touchmap_state_reset_runtime(&im->touchmap);
-    sc_touchmap_request_screen_refresh(im);
-    return true;
-}
-
-static bool
-sc_touchmap_load_file_internal(struct sc_input_manager *im,
-                               const char *touchmap_file) {
-    char *absolute_path = sc_touchmap_normalize_existing_path(touchmap_file);
-    if (!absolute_path) {
-        return false;
-    }
-
-    struct sc_gptm_gamepad_touchmap *map = parse_touchmap_config(absolute_path);
-    if (!map) {
-        LOGE("Fail to parse touchmap file %s", absolute_path);
-        free(absolute_path);
-        return false;
-    }
-
-    if (!sc_touchmap_apply_loaded_map(im, map, absolute_path)) {
-        sc_gptm_gamepad_touchmap_destroy(map);
-        free(absolute_path);
-        return false;
-    }
-
-    free(absolute_path);
-    return true;
-}
-
-static void
-sc_touchmap_set_manual_override(struct sc_input_manager *im, bool enabled) {
-    im->touchmap.manual_override = enabled;
-    if (enabled) {
-        sc_touchmap_state_clear_deferred(&im->touchmap);
-    }
-}
-
-static bool
-sc_touchmap_load_auto_file(struct sc_input_manager *im,
-                           const char *touchmap_file) {
-    if (!sc_touchmap_load_file_internal(im, touchmap_file)) {
-        return false;
-    }
-
-    sc_touchmap_set_manual_override(im, false);
-    sc_touchmap_state_clear_deferred(&im->touchmap);
-    return true;
-}
-
-static bool
-sc_touchmap_load_manual_file(struct sc_input_manager *im,
-                             const char *touchmap_file) {
-    if (!sc_touchmap_load_file_internal(im, touchmap_file)) {
-        return false;
-    }
-
-    if (im->touchmap.auto_enabled) {
-        LOGI("Manual touchmap override enabled: %s", touchmap_file);
-        sc_touchmap_set_manual_override(im, true);
-    }
-
-    return true;
-}
-
-static bool
-sc_touchmap_set_deferred_switch(struct sc_input_manager *im,
-                                const char *package_name,
-                                const char *touchmap_file) {
-    if (!sc_input_manager_replace_string(&im->touchmap.deferred_package,
-                                         package_name)) {
-        return false;
-    }
-
-    if (!sc_input_manager_replace_string(&im->touchmap.deferred_file,
-                                         touchmap_file)) {
-        sc_input_manager_replace_string(&im->touchmap.deferred_package, NULL);
-        return false;
-    }
-
-    return true;
-}
-
-static bool
-sc_touchmap_apply_auto_target(struct sc_input_manager *im,
-                              const char *package_name,
-                              const char *touchmap_file) {
-    if (touchmap_file) {
-        if (im->touchmap.map && im->touchmap.file
-                && !SDL_strcmp(im->touchmap.file, touchmap_file)) {
-            LOGI("Foreground package %s already uses %s",
-                 package_name ? package_name : "(none)", touchmap_file);
-            sc_touchmap_state_clear_deferred(&im->touchmap);
-            return true;
-        }
-
-        LOGI("Auto-loading touchmap for %s: %s",
-             package_name ? package_name : "(none)", touchmap_file);
-        if (!sc_touchmap_load_auto_file(im, touchmap_file)) {
-            return false;
-        }
-    } else {
-        if (im->touchmap.map) {
-            LOGI("No auto touchmap for %s, unloading current touchmap",
-                 package_name ? package_name : "(none)");
-            free_up_touchmap(im);
-        } else {
-            LOGD("No auto touchmap for %s",
-                 package_name ? package_name : "(none)");
-        }
-    }
-
-    sc_touchmap_set_manual_override(im, false);
-    return true;
-}
-
-static void
-sc_touchmap_maybe_apply_deferred_switch(struct sc_input_manager *im) {
-    const char *resolved = NULL;
-    if (im->touchmap.deferred_package) {
-        resolved = sc_touchmap_loader_find_path(&im->touchmap.loader,
-                                                im->touchmap.deferred_package);
-    }
-
-    struct sc_touchmap_switch_decision decision =
-        sc_touchmap_switch_decide_apply_deferred(&im->touchmap, resolved);
-
-    if (decision.action == SC_TOUCHMAP_SWITCH_ACTION_NONE) {
-        return;
-    }
-
-    if (decision.action == SC_TOUCHMAP_SWITCH_ACTION_DROP_DEFERRED) {
-        LOGI("Dropping deferred touchmap switch for %s: target changed",
-             im->touchmap.deferred_package
-                ? im->touchmap.deferred_package : "(none)");
-        sc_touchmap_state_clear_deferred(&im->touchmap);
-        return;
-    }
-
-    if (decision.action == SC_TOUCHMAP_SWITCH_ACTION_KEEP) {
-        sc_touchmap_state_clear_deferred(&im->touchmap);
-        return;
-    }
-
-    sc_touchmap_apply_auto_target(im, decision.package_name,
-                                  decision.touchmap_file);
-}
-
-static void
-sc_touchmap_resume_auto_mode(struct sc_input_manager *im) {
-    if (!im->touchmap.auto_enabled) {
-        sc_touchmap_set_manual_override(im, false);
-        return;
-    }
-
-    LOGI("Manual touchmap override cleared");
-    sc_touchmap_set_manual_override(im, false);
-    sc_touchmap_apply_auto_target(im, im->touchmap.current_package,
-                                  sc_touchmap_loader_find_path(
-                                      &im->touchmap.loader,
-                                      im->touchmap.current_package));
-}
 
 bool
 sc_input_manager_init(struct sc_input_manager *im,
@@ -290,9 +35,10 @@ sc_input_manager_init(struct sc_input_manager *im,
 
     im->mouse_bindings = params->mouse_bindings;
     im->gamepad_input_mode = params->gamepad_input_mode;
-    if (!sc_touchmap_state_init(&im->touchmap, params->touchmap_dir,
-                                params->touchmap_dir
-                                    && !params->touchmap_file)) {
+    if (!sc_touchmap_state_init(&im->touchmap, params->screen,
+                               params->touchmap_dir,
+                               params->touchmap_dir
+                                   && !params->touchmap_file)) {
         return false;
     }
     if (!sc_fg_app_detect_init(&im->fg_app_detect, params->device_serial)) {
@@ -323,7 +69,7 @@ sc_input_manager_init(struct sc_input_manager *im,
     im->next_sequence = 1; // 0 is reserved for SC_SEQUENCE_INVALID
 
     if (params->touchmap_file != NULL) {
-        sc_touchmap_load_manual_file(im, params->touchmap_file);
+        sc_touchmap_state_load_manual_file(&im->touchmap, params->touchmap_file);
     }
     return true;
 }
@@ -335,7 +81,7 @@ sc_input_manager_destroy(struct sc_input_manager *im) {
     }
 
     sc_fg_app_detect_destroy(&im->fg_app_detect);
-    free_up_touchmap(im);
+    sc_touchmap_state_free_up(&im->touchmap);
     sc_touchmap_state_destroy(&im->touchmap);
 }
 
@@ -667,614 +413,6 @@ inverse_point(struct sc_point point, struct sc_size size,
     return point;
 }
 
-static inline void
-free_up_touchmap(struct sc_input_manager *im) {
-    if (im->touchmap.map != NULL) {
-        sc_gptm_gamepad_touchmap_destroy(im->touchmap.map);
-        im->touchmap.map = NULL;
-    }
-    if (im->touchmap.file) {
-        SDL_free(im->touchmap.file);
-        im->touchmap.file = NULL;
-    }
-    sc_touchmap_state_reset_runtime(&im->touchmap);
-    sc_touchmap_request_screen_refresh(im);
-}
-
-static bool
-sc_touchmap_reload_current_file(struct sc_input_manager *im) {
-    if (!im->touchmap.file) {
-        LOGW("No touchmap file to reload");
-        return false;
-    }
-
-    return sc_touchmap_load_file_internal(im, im->touchmap.file);
-}
-
-bool
-sc_touchmap_drag_is_active(const struct sc_input_manager *im) {
-    return sc_touchmap_editor_is_dragging(&im->touchmap.editor);
-}
-
-bool
-sc_touchmap_has_ctrl_modifier(void) {
-    return SDL_GetModState() & KMOD_CTRL;
-}
-
-static bool
-sc_touchmap_edit_mode_active(const struct sc_input_manager *im) {
-    return im->touchmap.map && im->touchmap.edit_mode;
-}
-
-static bool
-sc_touchmap_selection_is_button(const struct sc_input_manager *im) {
-    struct sc_touchmap_editor_selection selection =
-        im->touchmap.editor.selection;
-    return (selection.target == SC_TOUCHMAP_EDITOR_TARGET_BUTTON_CENTER
-            || selection.target == SC_TOUCHMAP_EDITOR_TARGET_BUTTON_RADIUS)
-        && selection.button_index >= 0
-        && selection.button_index < im->touchmap.map->button_cnt;
-}
-
-static bool
-sc_touchmap_selection_is_walk(const struct sc_input_manager *im) {
-    struct sc_touchmap_editor_selection selection =
-        im->touchmap.editor.selection;
-    return (selection.target == SC_TOUCHMAP_EDITOR_TARGET_WALK_CENTER
-            || selection.target == SC_TOUCHMAP_EDITOR_TARGET_WALK_RADIUS)
-        && im->touchmap.map->has_walk;
-}
-
-static void
-sc_touchmap_mark_edited(struct sc_input_manager *im) {
-    im->touchmap.dirty = true;
-    im->touchmap.exit_after_save = false;
-    sc_touchmap_request_screen_refresh(im);
-}
-
-static void
-sc_touchmap_release_active_touches(struct sc_input_manager *im) {
-    struct sc_gptm_gamepad_touchmap *map = im->touchmap.map;
-    if (!map) {
-        return;
-    }
-
-    if (map->has_walk && map->walk.touch_down) {
-        map->walk.touch_down = false;
-        simulate_virtual_touch(im, map->walk.finger_id,
-                               AMOTION_EVENT_ACTION_UP,
-                               map->walk.current_pos);
-    }
-    if (map->has_walk) {
-        map->walk.current_pos = map->walk.center;
-    }
-
-    for (int i = 0; i < map->button_cnt; ++i) {
-        struct sc_gptm_touch_button *btn = &map->buttons[i];
-        if (btn->touch_down) {
-            btn->touch_down = false;
-            simulate_virtual_touch(im, btn->finger_id,
-                                   AMOTION_EVENT_ACTION_UP,
-                                   btn->current_pos);
-        }
-        btn->current_pos = btn->center;
-    }
-
-    map->joystick[0] = (struct sc_point) {0, 0};
-    map->joystick[1] = (struct sc_point) {0, 0};
-}
-
-static bool
-sc_touchmap_place_control(struct sc_input_manager *im, struct sc_point point) {
-    enum sc_touchmap_editor_mode mode =
-        sc_touchmap_editor_get_mode(&im->touchmap.editor);
-    struct sc_gptm_gamepad_touchmap *map = im->touchmap.map;
-
-    switch (mode) {
-        case SC_TOUCHMAP_EDITOR_MODE_PLACE_BUTTON: {
-            struct sc_gptm_touch_button button = {
-                .center = point,
-                .radius = 0,
-                .button = SC_GPTM_BUTTON_UNBOUND,
-                .is_skill = false,
-            };
-            int index = -1;
-            map = sc_gptm_gamepad_touchmap_add_button(map, &button, &index);
-            if (!map) {
-                return true;
-            }
-            im->touchmap.map = map;
-            sc_touchmap_editor_select_button(&im->touchmap.editor, index);
-            sc_touchmap_mark_edited(im);
-            return true;
-        }
-        case SC_TOUCHMAP_EDITOR_MODE_PLACE_SKILL: {
-            struct sc_gptm_touch_button skill = {
-                .center = point,
-                .radius = SC_TOUCHMAP_MIN_RADIUS,
-                .button = SC_GPTM_BUTTON_UNBOUND,
-                .is_skill = true,
-            };
-            int index = -1;
-            map = sc_gptm_gamepad_touchmap_add_button(map, &skill, &index);
-            if (!map) {
-                return true;
-            }
-            im->touchmap.map = map;
-            sc_touchmap_editor_select_button(&im->touchmap.editor, index);
-            sc_touchmap_mark_edited(im);
-            return true;
-        }
-        case SC_TOUCHMAP_EDITOR_MODE_PLACE_WALK:
-            if (!map->has_walk
-                    && sc_gptm_gamepad_touchmap_set_walk(
-                        map, point, SC_TOUCHMAP_MIN_RADIUS)) {
-                sc_touchmap_editor_select_walk(&im->touchmap.editor);
-                sc_touchmap_mark_edited(im);
-            } else {
-                sc_touchmap_editor_set_mode(&im->touchmap.editor,
-                                            SC_TOUCHMAP_EDITOR_MODE_SELECT);
-            }
-            return true;
-        case SC_TOUCHMAP_EDITOR_MODE_ADD_MENU:
-            sc_touchmap_editor_set_mode(&im->touchmap.editor,
-                                        SC_TOUCHMAP_EDITOR_MODE_SELECT);
-            im->touchmap.add_menu_open = false;
-            return true;
-        default:
-            return false;
-    }
-}
-
-static bool
-sc_touchmap_delete_selected_control(struct sc_input_manager *im) {
-    struct sc_gptm_gamepad_touchmap *map = im->touchmap.map;
-    if (sc_touchmap_selection_is_walk(im)) {
-        if (sc_gptm_gamepad_touchmap_remove_walk(map)) {
-            sc_touchmap_editor_clear_selection(&im->touchmap.editor);
-            sc_touchmap_mark_edited(im);
-        }
-        return true;
-    }
-
-    if (sc_touchmap_selection_is_button(im)) {
-        int old_index = im->touchmap.editor.selection.button_index;
-        int new_index = -1;
-        map = sc_gptm_gamepad_touchmap_remove_button(map, old_index,
-                                                     &new_index);
-        if (map) {
-            im->touchmap.map = map;
-            sc_touchmap_editor_select_after_button_remove(
-                &im->touchmap.editor, map, new_index);
-            sc_touchmap_mark_edited(im);
-        }
-        return true;
-    }
-
-    return true;
-}
-
-static bool
-sc_touchmap_capture_binding(struct sc_input_manager *im, uint8_t button) {
-    if (!sc_touchmap_edit_mode_active(im)) {
-        return false;
-    }
-
-    enum sc_touchmap_editor_mode mode =
-        sc_touchmap_editor_get_mode(&im->touchmap.editor);
-    if (mode != SC_TOUCHMAP_EDITOR_MODE_SELECT) {
-        return false;
-    }
-
-    bool captured = false;
-    if (sc_touchmap_selection_is_button(im)) {
-        int index = im->touchmap.editor.selection.button_index;
-        int new_index = -1;
-        if (sc_gptm_gamepad_touchmap_bind_button(im->touchmap.map, index,
-                                                 button, &new_index)) {
-            sc_touchmap_editor_select_button(&im->touchmap.editor, new_index);
-            sc_touchmap_mark_edited(im);
-            captured = true;
-        }
-    }
-
-    return captured;
-}
-
-static bool
-sc_touchmap_toggle_edit_mode(struct sc_input_manager *im, int32_t x, int32_t y) {
-    if (!im->touchmap.overlay_enabled) {
-        return false;
-    }
-
-    enum sc_touchmap_overlay_control control =
-        sc_touchmap_overlay_hit_control(&im->touchmap, &im->screen->rect,
-                                        x, y);
-    if (control == SC_TOUCHMAP_OVERLAY_CONTROL_NONE) {
-        return false;
-    }
-
-    switch (control) {
-        case SC_TOUCHMAP_OVERLAY_CONTROL_NEW:
-            assert(!im->touchmap.map);
-            create_empty_touchmap(im);
-            return true;
-        case SC_TOUCHMAP_OVERLAY_CONTROL_EDIT:
-            assert(im->touchmap.map);
-            sc_touchmap_release_active_touches(im);
-            sc_touchmap_state_set_edit_mode(&im->touchmap, true);
-            sc_touchmap_editor_set_mode(&im->touchmap.editor,
-                                        SC_TOUCHMAP_EDITOR_MODE_SELECT);
-            sc_touchmap_request_screen_refresh(im);
-            return true;
-        case SC_TOUCHMAP_OVERLAY_CONTROL_ADD:
-            sc_touchmap_editor_set_mode(
-                &im->touchmap.editor,
-                im->touchmap.add_menu_open
-                    ? SC_TOUCHMAP_EDITOR_MODE_ADD_MENU
-                    : SC_TOUCHMAP_EDITOR_MODE_SELECT);
-            sc_touchmap_request_screen_refresh(im);
-            return true;
-        case SC_TOUCHMAP_OVERLAY_CONTROL_DEL:
-            sc_touchmap_delete_selected_control(im);
-            sc_touchmap_request_screen_refresh(im);
-            return true;
-        case SC_TOUCHMAP_OVERLAY_CONTROL_ADD_BUTTON:
-            sc_touchmap_editor_set_mode(&im->touchmap.editor,
-                                        SC_TOUCHMAP_EDITOR_MODE_PLACE_BUTTON);
-            sc_touchmap_request_screen_refresh(im);
-            return true;
-        case SC_TOUCHMAP_OVERLAY_CONTROL_ADD_SKILL:
-            sc_touchmap_editor_set_mode(&im->touchmap.editor,
-                                        SC_TOUCHMAP_EDITOR_MODE_PLACE_SKILL);
-            sc_touchmap_request_screen_refresh(im);
-            return true;
-        case SC_TOUCHMAP_OVERLAY_CONTROL_ADD_WALK:
-            sc_touchmap_editor_set_mode(
-                &im->touchmap.editor,
-                im->touchmap.map && im->touchmap.map->has_walk
-                    ? SC_TOUCHMAP_EDITOR_MODE_SELECT
-                    : SC_TOUCHMAP_EDITOR_MODE_PLACE_WALK);
-            sc_touchmap_request_screen_refresh(im);
-            return true;
-        case SC_TOUCHMAP_OVERLAY_CONTROL_QUIT:
-            assert(im->touchmap.map);
-            sc_touchmap_editor_set_mode(&im->touchmap.editor,
-                                        SC_TOUCHMAP_EDITOR_MODE_SELECT);
-            break;
-        default:
-            return true;
-    }
-
-    if (!im->touchmap.map) {
-        create_empty_touchmap(im);
-        return true;
-    }
-
-    assert(im->touchmap.edit_mode);
-
-    if (!im->touchmap.dirty) {
-        im->touchmap.exit_after_save = false;
-        sc_touchmap_state_set_edit_mode(&im->touchmap, false);
-        sc_touchmap_request_screen_refresh(im);
-        sc_touchmap_maybe_apply_deferred_switch(im);
-        return true;
-    }
-
-    int choice = tinyfd_messageBox(
-        "Save Touch Map?",
-        "Save changes before exiting edit mode?",
-        "yesnocancel",
-        "question",
-        1);
-
-    if (choice == 1) {
-        im->touchmap.exit_after_save = true;
-        sc_start_thread("SaveTouchMap", save_touchmap_dialog_thread, im);
-    } else if (choice == 2) {
-        if (!im->touchmap.file) {
-            free_up_touchmap(im);
-            sc_touchmap_state_set_edit_mode(&im->touchmap, false);
-            sc_touchmap_request_screen_refresh(im);
-            sc_touchmap_maybe_apply_deferred_switch(im);
-        } else if (sc_touchmap_reload_current_file(im)) {
-            sc_touchmap_state_set_edit_mode(&im->touchmap, false);
-            sc_touchmap_request_screen_refresh(im);
-            sc_touchmap_maybe_apply_deferred_switch(im);
-        }
-    } else {
-        im->touchmap.exit_after_save = false;
-    }
-
-    return true;
-}
-
-static int open_file_dialog_thread(void *data) {
-    struct sc_input_manager *im = (struct sc_input_manager *)data;
-    (void)im;
-
-    char const * lFilterPatterns[2] = {"*.json", "*.*"};
-    char * file_name = tinyfd_openFileDialog(
-        "Open Touch Map File",
-        "",
-        2,
-        lFilterPatterns,
-        "JSON file",
-        0
-    );
-
-    if (file_name == NULL) {
-        LOGI("Open File cancelled");
-        return 1;
-    }
-
-    LOGI("Selected file: %s", file_name);
-
-    // Send custom event to notify the main thread
-    SDL_Event event;
-    event.type = SC_EVENT_FILE_DIALOG;
-    event.user.code = 0;
-
-    int len = SDL_strlen(file_name) + 1;
-    event.user.data1 = SDL_malloc(len);
-    SDL_strlcpy(event.user.data1, file_name, len);
-    SDL_PushEvent(&event);
-
-    return 0;
-}
-
-static int save_touchmap_dialog_thread(void *data) {
-    struct sc_input_manager *im = (struct sc_input_manager *)data;
-    char *default_path = sc_touchmap_build_save_dialog_default_path(im);
-
-    char const * lFilterPatterns[2] = {"*.json", "*.*"};
-    char * file_name = tinyfd_saveFileDialog(
-        "Save Touch Map File",
-        default_path ? default_path : "",
-        2,
-        lFilterPatterns,
-        "JSON file"
-    );
-    SDL_free(default_path);
-
-    if (file_name == NULL) {
-        LOGI("Save File cancelled");
-        SDL_Event event;
-        event.type = SC_EVENT_TOUCHMAP_SAVE;
-        event.user.code = 1;
-        event.user.data1 = NULL;
-        SDL_PushEvent(&event);
-        return 1;
-    }
-
-    LOGI("Selected save file: %s", file_name);
-
-    SDL_Event event;
-    event.type = SC_EVENT_TOUCHMAP_SAVE;
-    event.user.code = 0;
-    int len = SDL_strlen(file_name) + 1;
-    event.user.data1 = SDL_malloc(len);
-    SDL_strlcpy(event.user.data1, file_name, len);
-    SDL_PushEvent(&event);
-
-    return 0;
-}
-
-static void sc_start_thread(const char * name, SDL_ThreadFunction fn, void *data) {
-    SDL_Thread *thread = SDL_CreateThread(fn, name, data);
-    if (!thread) {
-        LOGE("Failed to create thread: %s", SDL_GetError());
-    } else {
-        SDL_DetachThread(thread);
-    }
-}
-
-static void
-open_touchmap_file(struct sc_input_manager *im) {
-    assert(im->controller);
-
-    sc_start_thread("FileDialogThread", open_file_dialog_thread, im);
-}
-
-static void
-create_empty_touchmap(struct sc_input_manager *im) {
-    if (im->touchmap.map) {
-        LOGW("Touchmap already loaded");
-        return;
-    }
-
-    struct sc_gptm_gamepad_touchmap *map =
-        sc_gptm_gamepad_touchmap_new_empty();
-    if (!map) {
-        LOGE("Failed to create empty touchmap");
-        return;
-    }
-
-    if (im->touchmap.auto_enabled) {
-        if (im->touchmap.current_package) {
-            if (!sc_gptm_gamepad_touchmap_set_package_name(
-                    map, im->touchmap.current_package)) {
-                sc_gptm_gamepad_touchmap_destroy(map);
-                LOGE("Failed to stamp packageName on empty touchmap");
-                return;
-            }
-            LOGI("Created empty touchmap for package %s",
-                 im->touchmap.current_package);
-        } else {
-            LOGI("Created empty touchmap without packageName: foreground app "
-                 "association unavailable");
-        }
-    }
-
-    if (!sc_touchmap_apply_loaded_map(im, map, NULL)) {
-        sc_gptm_gamepad_touchmap_destroy(map);
-        LOGE("Failed to activate empty touchmap");
-        return;
-    }
-
-    sc_touchmap_mark_edited(im);
-    sc_touchmap_state_set_overlay_enabled(&im->touchmap, true);
-    sc_touchmap_state_set_edit_mode(&im->touchmap, true);
-}
-
-static void
-save_touchmap_file(struct sc_input_manager *im, const char *filename) {
-    if (!filename || !im->touchmap.map) {
-        return;
-    }
-
-    if (sc_gptm_gamepad_touchmap_has_unbound_buttons(im->touchmap.map)) {
-        tinyfd_messageBox(
-            "Cannot Save Touch Map",
-            "Some touchmap controls are not bound to a gamepad input.\n\n"
-            "Bind every red control before saving.",
-            "ok",
-            "warning",
-            1);
-        im->touchmap.exit_after_save = false;
-        return;
-    }
-
-    if (!save_touchmap_config(filename, im->touchmap.map)) {
-        LOGE("Fail to save touchmap file %s", filename);
-        im->touchmap.exit_after_save = false;
-        return;
-    }
-
-    char *absolute_path = sc_touchmap_normalize_existing_path(filename);
-    if (!absolute_path) {
-        im->touchmap.exit_after_save = false;
-        return;
-    }
-
-    if (!sc_input_manager_replace_string(&im->touchmap.file, absolute_path)) {
-        free(absolute_path);
-        im->touchmap.exit_after_save = false;
-        return;
-    }
-
-    if (im->touchmap.auto_enabled) {
-        bool in_auto_dir = sc_touchmap_path_is_in_auto_dir(im, absolute_path);
-        if (in_auto_dir) {
-            if (sc_touchmap_loader_rebuild_index(&im->touchmap.loader)) {
-                const char *package_name =
-                    sc_gptm_gamepad_touchmap_get_package_name(
-                        im->touchmap.map);
-                const char *indexed_path = package_name
-                    ? sc_touchmap_loader_find_path(&im->touchmap.loader,
-                                                   package_name)
-                    : NULL;
-                if (package_name && im->touchmap.current_package
-                        && !SDL_strcmp(package_name, im->touchmap.current_package)
-                        && indexed_path
-                        && !SDL_strcmp(absolute_path, indexed_path)) {
-                    LOGI("Saved touchmap is now the active auto-loaded map "
-                         "for %s", package_name);
-                    sc_touchmap_set_manual_override(im, false);
-                } else {
-                    LOGI("Saved touchmap stays as manual override");
-                    sc_touchmap_set_manual_override(im, true);
-                }
-            } else {
-                LOGW("Could not refresh touchmap index after save");
-                sc_touchmap_set_manual_override(im, true);
-            }
-        } else {
-            LOGI("Saved touchmap outside auto directory, keeping manual "
-                 "override");
-            sc_touchmap_set_manual_override(im, true);
-        }
-    }
-
-    free(absolute_path);
-
-    im->touchmap.dirty = false;
-    if (im->touchmap.exit_after_save) {
-        sc_touchmap_state_set_edit_mode(&im->touchmap, false);
-        im->touchmap.exit_after_save = false;
-    }
-    sc_touchmap_request_screen_refresh(im);
-    sc_touchmap_maybe_apply_deferred_switch(im);
-}
-
-
-
-static bool
-sc_input_manager_process_touchmap_edit_key(struct sc_input_manager *im,
-                                           const SDL_KeyboardEvent *event) {
-    if (!sc_touchmap_edit_mode_active(im)) {
-        return false;
-    }
-
-    SDL_Keycode sdl_keycode = event->keysym.sym;
-    if (sdl_keycode == SDLK_ESCAPE) {
-        bool pending =
-            sc_touchmap_editor_get_mode(&im->touchmap.editor)
-                != SC_TOUCHMAP_EDITOR_MODE_SELECT
-            || im->touchmap.add_menu_open;
-        if (!pending) {
-            return false;
-        }
-
-        if (event->type == SDL_KEYDOWN && !event->repeat) {
-            sc_touchmap_editor_set_mode(&im->touchmap.editor,
-                                        SC_TOUCHMAP_EDITOR_MODE_SELECT);
-            im->touchmap.add_menu_open = false;
-            sc_touchmap_request_screen_refresh(im);
-        }
-        return true;
-    }
-
-    if (sdl_keycode != SDLK_LEFT && sdl_keycode != SDLK_RIGHT
-            && sdl_keycode != SDLK_UP && sdl_keycode != SDLK_DOWN) {
-        return false;
-    }
-
-    uint16_t mod = event->keysym.mod;
-    if (mod & (KMOD_CTRL | KMOD_ALT | KMOD_GUI)) {
-        return false;
-    }
-
-    if (event->type != SDL_KEYDOWN) {
-        return true;
-    }
-
-    int32_t step = mod & KMOD_SHIFT ? 10 : 1;
-    int32_t dx = 0;
-    int32_t dy = 0;
-    int32_t radius_delta = 0;
-
-    switch (sdl_keycode) {
-        case SDLK_LEFT:
-            dx = -step;
-            radius_delta = -step;
-            break;
-        case SDLK_RIGHT:
-            dx = step;
-            radius_delta = step;
-            break;
-        case SDLK_UP:
-            dy = -step;
-            radius_delta = step;
-            break;
-        case SDLK_DOWN:
-            dy = step;
-            radius_delta = -step;
-            break;
-        default:
-            assert(false);
-            return true;
-    }
-
-    if (sc_touchmap_editor_nudge_selection(&im->touchmap.editor,
-                                           im->touchmap.map, dx, dy,
-                                           radius_delta)) {
-        sc_touchmap_mark_edited(im);
-    }
-
-    return true;
-}
-
 static void
 sc_input_manager_process_key(struct sc_input_manager *im,
                              const SDL_KeyboardEvent *event) {
@@ -1289,20 +427,6 @@ sc_input_manager_process_key(struct sc_input_manager *im,
     bool ctrl = sc_touchmap_has_ctrl_modifier();
     bool shift = event->keysym.mod & KMOD_SHIFT;
     bool repeat = event->repeat;
-
-    if (sdl_keycode == SDLK_s && ctrl && down && !repeat
-            && im->touchmap.map) {
-        if (shift || !im->touchmap.file) {
-            sc_start_thread("SaveTouchMap", save_touchmap_dialog_thread, im);
-        } else {
-            save_touchmap_file(im, im->touchmap.file);
-        }
-        return;
-    }
-
-    if (sc_input_manager_process_touchmap_edit_key(im, event)) {
-        return;
-    }
 
     // Either the modifier includes a shortcut modifier, or the key
     // press/release is a modifier key.
@@ -1479,11 +603,10 @@ sc_input_manager_process_key(struct sc_input_manager *im,
                 if (control && !repeat && down && !paused
                         && im->kp) {
                     if (shift) {
-                        free_up_touchmap(im);
-                        sc_touchmap_resume_auto_mode(im);
+                        sc_touchmap_state_free_up(&im->touchmap);
+                        sc_touchmap_state_resume_auto_mode(&im->touchmap);
                     } else {
-                        // Show OpenFileDialog to select TouchMap file
-                        open_touchmap_file(im);
+                        sc_touchmap_state_open_file_dialog(&im->touchmap);
                     }
                 }
                 return;
@@ -1494,7 +617,7 @@ sc_input_manager_process_key(struct sc_input_manager *im,
                         sc_touchmap_state_toggle_overlay(&im->touchmap);
                         LOGI("Touchmap overlay %s",
                              im->touchmap.overlay_enabled ? "enabled" : "disabled");
-                        sc_touchmap_request_screen_refresh(im);
+                        sc_touchmap_state_request_refresh(&im->touchmap);
                     }
                 }
                 return;                
@@ -1583,18 +706,7 @@ sc_input_manager_process_mouse_motion(struct sc_input_manager *im,
         return;
     }
 
-    if (sc_touchmap_drag_is_active(im)) {
-        struct sc_point point =
-            sc_screen_convert_window_to_frame_coords(im->screen, event->x,
-                                                     event->y);
-        if (sc_touchmap_editor_apply_drag(&im->touchmap.editor,
-                                          im->touchmap.map, point)) {
-            sc_touchmap_mark_edited(im);
-        }
-        return;
-    }
-
-    if (sc_touchmap_edit_mode_active(im)) {
+    if (sc_touchmap_state_edit_mode_active(&im->touchmap)) {
         return;
     }
 
@@ -1628,7 +740,7 @@ sc_input_manager_process_mouse_motion(struct sc_input_manager *im,
 static void
 sc_input_manager_process_touch(struct sc_input_manager *im,
                                const SDL_TouchFingerEvent *event) {
-    if (sc_touchmap_edit_mode_active(im)) {
+    if (sc_touchmap_state_edit_mode_active(&im->touchmap)) {
         return;
     }
 
@@ -1704,48 +816,7 @@ sc_input_manager_process_mouse_button(struct sc_input_manager *im,
     bool ctrl_pressed = sc_touchmap_has_ctrl_modifier();
     bool shift_pressed = keymod & KMOD_SHIFT;
 
-    if (!down && event->button == SDL_BUTTON_LEFT
-            && im->touchmap.consume_left_button_up) {
-        im->touchmap.consume_left_button_up = false;
-        return;
-    }
-
-    if (down && event->button == SDL_BUTTON_LEFT) {
-        int32_t x = event->x;
-        int32_t y = event->y;
-        sc_screen_hidpi_scale_coords(im->screen, &x, &y);
-        if (sc_touchmap_toggle_edit_mode(im, x, y)) {
-            im->touchmap.consume_left_button_up = true;
-            return;
-        }
-    }
-
-    if (sc_touchmap_edit_mode_active(im)) {
-        if (!down && event->button == SDL_BUTTON_LEFT
-                && sc_touchmap_drag_is_active(im)) {
-            sc_touchmap_editor_reset_drag(&im->touchmap.editor);
-            return;
-        }
-
-        if (sc_touchmap_drag_is_active(im)) {
-            return;
-        }
-
-        if (down && event->button == SDL_BUTTON_LEFT) {
-            struct sc_point point = sc_screen_convert_window_to_frame_coords(
-                im->screen, event->x, event->y);
-            if (sc_touchmap_place_control(im, point)) {
-                im->touchmap.consume_left_button_up = true;
-                sc_touchmap_request_screen_refresh(im);
-            } else {
-                if (!sc_touchmap_editor_try_start_drag(
-                               &im->touchmap.editor, im->touchmap.map, point)) {
-                    im->touchmap.consume_left_button_up = true;
-                }
-                sc_touchmap_request_screen_refresh(im);
-            }
-        }
-
+    if (sc_touchmap_state_edit_mode_active(&im->touchmap)) {
         return;
     }
 
@@ -1820,12 +891,13 @@ sc_input_manager_process_mouse_button(struct sc_input_manager *im,
         im->mouse_buttons_state |= button;
     }
 
-    if (!down && event->button == SDL_BUTTON_LEFT && sc_touchmap_drag_is_active(im)) {
+    if (!down && event->button == SDL_BUTTON_LEFT
+            && sc_touchmap_editor_is_dragging(&im->touchmap.editor)) {
         sc_touchmap_editor_reset_drag(&im->touchmap.editor);
         return;
     }
 
-    if (sc_touchmap_drag_is_active(im)) {
+    if (sc_touchmap_editor_is_dragging(&im->touchmap.editor)) {
         return;
     }
 
@@ -1903,7 +975,7 @@ sc_input_manager_process_mouse_button(struct sc_input_manager *im,
 static void
 sc_input_manager_process_mouse_wheel(struct sc_input_manager *im,
                                      const SDL_MouseWheelEvent *event) {
-    if (sc_touchmap_edit_mode_active(im)) {
+    if (sc_touchmap_state_edit_mode_active(&im->touchmap)) {
         return;
     }
 
@@ -2003,7 +1075,7 @@ sc_input_manager_process_gamepad_axis(struct sc_input_manager *im,
 
 static void
 sc_input_manager_process_gamepad_button(struct sc_input_manager *im,
-                                       const SDL_ControllerButtonEvent *event) {
+                                        const SDL_ControllerButtonEvent *event) {
     enum sc_gamepad_button button = sc_gamepad_button_from_sdl(event->button);
     if (button == SC_GAMEPAD_BUTTON_UNKNOWN) {
         return;
@@ -2015,6 +1087,18 @@ sc_input_manager_process_gamepad_button(struct sc_input_manager *im,
         .button = button,
     };
     im->gp->ops->process_gamepad_button(im->gp, &evt);
+}
+
+static void
+sc_input_manager_process_gamepad_input(struct sc_input_manager *im,
+                                       const SDL_Event *event) {
+    if (event->type == SDL_CONTROLLERAXISMOTION) {
+        sc_input_manager_process_gamepad_axis(im, &event->caxis);
+    } else {
+        assert(event->type == SDL_CONTROLLERBUTTONDOWN
+            || event->type == SDL_CONTROLLERBUTTONUP);
+        sc_input_manager_process_gamepad_button(im, &event->cbutton);
+    }
 }
 
 static bool
@@ -2042,159 +1126,6 @@ sc_input_manager_process_file(struct sc_input_manager *im,
     bool ok = sc_file_pusher_request(im->fp, action, file);
     if (!ok) {
         free(file);
-    }
-}
-
-
-static void 
-sc_handle_skill_button_direction(struct sc_input_manager *im, struct sc_gptm_touch_button *touch_btn, struct sc_point pos) {
-    if (sc_touchmap_edit_mode_active(im)) {
-        return;
-    }
-
-    touch_btn->current_pos.x = touch_btn->center.x + (pos.x * touch_btn->radius / SDL_MAX_SINT16);
-    touch_btn->current_pos.y = touch_btn->center.y + (pos.y * touch_btn->radius / SDL_MAX_SINT16);
-
-    simulate_virtual_touch(im, touch_btn->finger_id, AMOTION_EVENT_ACTION_MOVE, touch_btn->current_pos);
-}
-
-struct delayed_skill_ctx {
-    Uint32 delay;
-    struct sc_input_manager *im;
-    struct sc_gptm_touch_button * button;
-    struct sc_point pos;
-} ;
-
-static int delay_skill_event_thread(void *data) {
-    struct delayed_skill_ctx *ctx = (struct delayed_skill_ctx *)data;
-
-    SDL_Delay(ctx->delay);
-    
-    sc_handle_skill_button_direction(ctx->im, ctx->button, ctx->pos);
-
-    SDL_free(data);
-
-    return 0;
-}
-
-static void 
-sc_handle_touchmap_button(struct sc_input_manager *im, uint8_t button, uint8_t state) {
-    if (sc_touchmap_edit_mode_active(im)) {
-        return;
-    }
-
-    struct sc_gptm_gamepad_touchmap * map = im->touchmap.map;
-    struct sc_gptm_touch_button *touch_btn =
-        sc_gptm_gamepad_touchmap_find_button(map, button);
-    if (touch_btn == NULL) {
-        LOGE("Button %d not found in touch map", button);
-        return;
-    }
-    if (state) {
-        if (!touch_btn->touch_down) {
-            touch_btn->touch_down = true;
-            touch_btn->current_pos = touch_btn->center;
-            simulate_virtual_touch(im, touch_btn->finger_id, AMOTION_EVENT_ACTION_DOWN, touch_btn->center);
-
-            if (touch_btn->is_skill) {
-                // Hard code to use the rigth joystick to control skill 
-                struct sc_point joystick = im->touchmap.map->joystick[1];
-
-                int delta_x, delta_y, distance;
-                delta_x = joystick.x * touch_btn->radius / SDL_MAX_SINT16;
-                delta_y = joystick.y * touch_btn->radius / SDL_MAX_SINT16;
-                distance = delta_x * delta_x + delta_y * delta_y;
-
-                if (distance >= SC_GPTM_WALK_CONTROL_DEADZONE) {
-                    struct delayed_skill_ctx * ctx = SDL_malloc(sizeof(struct delayed_skill_ctx));
-                    if (ctx != NULL) {
-                        ctx->delay = 5;
-                        ctx->im = im;
-                        ctx->button = touch_btn;
-                        ctx->pos = joystick;
-
-                        sc_start_thread("DelaySkill", delay_skill_event_thread, ctx);                    
-                    }
-                }
-            }
-        }
-    } else {
-        if (touch_btn->touch_down) {
-            touch_btn->touch_down = false;
-            simulate_virtual_touch(im, touch_btn->finger_id, AMOTION_EVENT_ACTION_UP, touch_btn->current_pos);
-        }
-    }
-}
-
-static void 
-sc_handle_touchmap_walk(struct sc_input_manager *im, struct sc_point pos) {
-    if (sc_touchmap_edit_mode_active(im)) {
-        return;
-    }
-
-    if (!im->touchmap.map->has_walk) {
-        return;
-    }
-
-    struct sc_gptm_walk_control *walk = &im->touchmap.map->walk;
-
-    int wctl_x, wctl_y, distance;
-    wctl_x = pos.x * walk->radius / SDL_MAX_SINT16;
-    wctl_y = pos.y * walk->radius / SDL_MAX_SINT16;
-
-    walk->current_pos.x = walk->center.x + wctl_x;
-    walk->current_pos.y = walk->center.y + wctl_y;
-
-
-    distance = wctl_x * wctl_x + wctl_y * wctl_y;
-    if (distance < SC_GPTM_WALK_CONTROL_DEADZONE) {
-        if (walk->touch_down) {
-            walk->touch_down = false;
-            simulate_virtual_touch(im, walk->finger_id, AMOTION_EVENT_ACTION_UP, walk->center);
-        }
-    } else {
-        if (!walk->touch_down) {
-            walk->touch_down = true;
-            simulate_virtual_touch(im, walk->finger_id, AMOTION_EVENT_ACTION_DOWN, walk->center);
-        }
-        simulate_virtual_touch(im, walk->finger_id, AMOTION_EVENT_ACTION_MOVE, walk->current_pos);
-    }
-}
-
-static void 
-sc_handle_touchmap_skill_cast(struct sc_input_manager *im, struct sc_point pos) {
-    if (sc_touchmap_edit_mode_active(im)) {
-        return;
-    }
-
-    struct sc_gptm_gamepad_touchmap *map = im->touchmap.map;
-
-    for (int i = 0; i < map->button_cnt; i++) {
-        struct sc_gptm_touch_button * btn = &map->buttons[i];
-        if (btn->is_skill && btn->touch_down) {
-            sc_handle_skill_button_direction(im, btn, pos);
-        }
-    }
-}
-
-static void 
-sc_handle_touchmap_joystick(struct sc_input_manager *im, int idx, int64_t value, bool is_x_axis) {
-    if (sc_touchmap_edit_mode_active(im)) {
-        return;
-    }
-
-    struct sc_point *joystick = &im->touchmap.map->joystick[idx];
-
-    if (is_x_axis) {
-        joystick->x = value;
-    } else {
-        joystick->y = value;
-    }
-
-    if (idx == 0) {
-        sc_handle_touchmap_walk(im, *joystick);
-    } else if (idx == 1) {
-        sc_handle_touchmap_skill_cast(im, *joystick);
     }
 }
 
@@ -2252,67 +1183,15 @@ sc_input_manager_handle_event(struct sc_input_manager *im,
             sc_input_manager_process_gamepad_device(im, &event->cdevice);
             break;
         case SDL_CONTROLLERAXISMOTION:
-            if (sc_touchmap_edit_mode_active(im)) {
-                if ((event->caxis.axis == SDL_CONTROLLER_AXIS_TRIGGERLEFT
-                        || event->caxis.axis
-                            == SDL_CONTROLLER_AXIS_TRIGGERRIGHT)
-                        && event->caxis.value > SDL_MAX_SINT16 / 2) {
-                    sc_touchmap_capture_binding(
-                        im, SDL_CONTROLLER_BUTTON_MAX + event->caxis.axis);
-                }
-                break;
-            }
-
-            if (!im->gp || paused) {
-                break;
-            }
-
-            LOGD("Gamepad Axis: (%d, %d, %d)", event->caxis.which, event->caxis.axis, event->caxis.value);
-
-            if (im->touchmap.map == NULL) {
-                sc_input_manager_process_gamepad_axis(im, &event->caxis);
-            } else {
-                int64_t value = event->caxis.value;
-                switch (event->caxis.axis) {
-                case SDL_CONTROLLER_AXIS_LEFTX:
-                case SDL_CONTROLLER_AXIS_LEFTY:
-                    sc_handle_touchmap_joystick(im, 0, value, event->caxis.axis == SDL_CONTROLLER_AXIS_LEFTX);
-                    break;
-                case SDL_CONTROLLER_AXIS_RIGHTX:
-                case SDL_CONTROLLER_AXIS_RIGHTY:
-                    sc_handle_touchmap_joystick(im, 1, value, event->caxis.axis == SDL_CONTROLLER_AXIS_RIGHTX);
-                    break;
-                case SDL_CONTROLLER_AXIS_TRIGGERLEFT:
-                case SDL_CONTROLLER_AXIS_TRIGGERRIGHT:
-                    if (value > SDL_MAX_SINT16 / 2) {
-                        sc_handle_touchmap_button(im, SDL_CONTROLLER_BUTTON_MAX+event->caxis.axis, 1);
-
-                    } else if (value < SDL_MAX_SINT16 / 3) {
-                        sc_handle_touchmap_button(im, SDL_CONTROLLER_BUTTON_MAX+event->caxis.axis, 0);
-                    }
-                    break;
-                }
-            }            
-            break;
         case SDL_CONTROLLERBUTTONDOWN:
         case SDL_CONTROLLERBUTTONUP:
-            if (sc_touchmap_edit_mode_active(im)) {
-                if (event->cbutton.state == SDL_PRESSED) {
-                    sc_touchmap_capture_binding(im, event->cbutton.button);
-                }
-                break;
-            }
-
             if (!im->gp || paused) {
                 break;
             }
-
-            LOGD("Gamepad Button: (%d, %d, %d)", event->cbutton.which, event->cbutton.button, event->cbutton.state);
-
-            if (im->touchmap.map == NULL) {
-                sc_input_manager_process_gamepad_button(im, &event->cbutton);
-            } else if (im->touchmap.map != NULL) {
-                sc_handle_touchmap_button(im, event->cbutton.button, event->cbutton.state);
+            if (im->touchmap.map) {
+                sc_touchmap_runtime_handle_event(im, event);
+            } else {
+                sc_input_manager_process_gamepad_input(im, event);
             }
             break;
         case SDL_DROPFILE: {
@@ -2322,68 +1201,10 @@ sc_input_manager_handle_event(struct sc_input_manager *im,
             sc_input_manager_process_file(im, &event->drop);
             break;
         }
-        case SC_EVENT_FILE_DIALOG: {
-            const char * file_name = event->user.data1;
-            if (file_name == NULL) {
-                break;
-            }
-            LOGI("Got FILE OPEN Event with file name: %s", file_name);
-
-            sc_touchmap_load_manual_file(im, file_name);
-            SDL_free((void*)file_name);
+        case SC_EVENT_FILE_DIALOG:
+        case SC_EVENT_TOUCHMAP_SAVE:
+        case SC_EVENT_FG_APP_CHANGED:
+            sc_touchmap_runtime_handle_event(im, event);
             break;
-        }
-        case SC_EVENT_TOUCHMAP_SAVE: {
-            const char * file_name = event->user.data1;
-            if (event->user.code == 1) {
-                im->touchmap.exit_after_save = false;
-                break;
-            }
-            if (file_name == NULL) {
-                break;
-            }
-            LOGI("Got TOUCHMAP SAVE Event with file name: %s", file_name);
-
-            save_touchmap_file(im, file_name);
-            SDL_free((void*)file_name);
-            break;
-        }
-        case SC_EVENT_FG_APP_CHANGED: {
-            struct sc_fg_app_changed_event *payload =
-                event->user.data1;
-            const char *package_name = payload ? payload->package_name : NULL;
-            if (payload) {
-                LOGD("Got FG APP CHANGED Event: %s",
-                     package_name ? package_name : "(none)");
-            }
-
-            sc_input_manager_replace_string(&im->touchmap.current_package,
-                                            package_name);
-            if (im->touchmap.auto_enabled && !im->touchmap.manual_override) {
-                const char *touchmap_file =
-                    sc_touchmap_loader_find_path(&im->touchmap.loader,
-                                                 package_name);
-                struct sc_touchmap_switch_decision decision =
-                    sc_touchmap_switch_decide_foreground_change(
-                        &im->touchmap, package_name, touchmap_file);
-                LOGI("Foreground package %s resolved to %s",
-                     package_name ? package_name : "(none)",
-                     touchmap_file ? touchmap_file : "(no touchmap)");
-                if (decision.action == SC_TOUCHMAP_SWITCH_ACTION_DEFER) {
-                    if (sc_touchmap_set_deferred_switch(im,
-                                                        decision.package_name,
-                                                        decision.touchmap_file)) {
-                        LOGI("Deferring auto touchmap switch for %s",
-                             package_name ? package_name : "(none)");
-                    }
-                } else if (decision.action != SC_TOUCHMAP_SWITCH_ACTION_NONE
-                        && decision.action != SC_TOUCHMAP_SWITCH_ACTION_KEEP) {
-                    sc_touchmap_apply_auto_target(im, decision.package_name,
-                                                  decision.touchmap_file);
-                }
-            }
-            sc_fg_app_changed_event_destroy(payload);
-            break;
-        }
     }
 }

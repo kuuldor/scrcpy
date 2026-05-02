@@ -12,7 +12,7 @@
 #include "file_pusher.h"
 #include "fg_app_detect.h"
 #include "options.h"
-#include "touchmap_state.h"
+#include "touchmap/touchmap_state.h"
 #include "trait/gamepad_processor.h"
 #include "trait/key_processor.h"
 #include "trait/mouse_processor.h"
@@ -80,9 +80,6 @@ sc_input_manager_destroy(struct sc_input_manager *im);
 
 void sc_input_manager_handle_event(struct sc_input_manager *im,
                                     const SDL_Event *event);
-
-bool sc_touchmap_drag_is_active(const struct sc_input_manager *im);
-bool sc_touchmap_has_ctrl_modifier(void);
 
 
 #endif

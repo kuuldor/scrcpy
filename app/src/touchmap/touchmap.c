@@ -302,8 +302,8 @@ sc_gptm_gamepad_touchmap_set_walk(struct sc_gptm_gamepad_touchmap *map,
         return false;
     }
 
-    if (radius < SC_TOUCHMAP_MIN_RADIUS) {
-        radius = SC_TOUCHMAP_MIN_RADIUS;
+    if (radius < SC_TOUCHMAP_WALK_RADIUS) {
+        radius = SC_TOUCHMAP_WALK_RADIUS;
     }
 
     uint64_t finger_id = map->has_walk && map->walk.finger_id

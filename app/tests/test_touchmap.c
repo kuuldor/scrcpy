@@ -7,11 +7,9 @@
 
 #include <SDL2/SDL.h>
 
-#include "options.h"
 #include "third_party/cjson/cJSON.h"
-#include "touchmap.h"
-#include "touchmap_editor.h"
-#include "touchmap_overlay.h"
+#include "touchmap/touchmap.h"
+#include "touchmap/touchmap_editor.h"
 
 static bool
 write_file(const char *path, const char *content) {
@@ -360,7 +358,7 @@ test_touchmap_mutation_helpers(void) {
     assert(map->has_walk);
     assert(map->walk.center.x == 100);
     assert(map->walk.center.y == 200);
-    assert(map->walk.radius == SC_TOUCHMAP_MIN_RADIUS);
+    assert(map->walk.radius == SC_TOUCHMAP_WALK_RADIUS);
     assert(map->walk.finger_id == SC_GPTM_BASE_FINGER_ID);
 
     assert(sc_gptm_gamepad_touchmap_remove_walk(map));
@@ -467,42 +465,6 @@ test_touchmap_mutation_helpers(void) {
 }
 
 static void
-assert_transformed_point(enum sc_orientation orientation, int x, int y) {
-    const struct sc_size frame_size = {100, 200};
-    const SDL_Rect unrotated = {10, 20, 1000, 2000};
-    const SDL_Rect rotated = {10, 20, 2000, 1000};
-    const SDL_Rect *rect = sc_orientation_is_swap(orientation)
-                         ? &rotated : &unrotated;
-    const struct sc_point point = {10, 30};
-
-    struct sc_point result = sc_touchmap_overlay_transform_point(
-        &point, &frame_size, rect, orientation);
-    assert(result.x == x);
-    assert(result.y == y);
-}
-
-static void
-test_overlay_coordinate_transforms(void) {
-    assert_transformed_point(SC_ORIENTATION_0, 110, 320);
-    assert_transformed_point(SC_ORIENTATION_90, 1710, 120);
-    assert_transformed_point(SC_ORIENTATION_180, 910, 1720);
-    assert_transformed_point(SC_ORIENTATION_270, 310, 920);
-    assert_transformed_point(SC_ORIENTATION_FLIP_0, 910, 320);
-    assert_transformed_point(SC_ORIENTATION_FLIP_90, 1710, 920);
-    assert_transformed_point(SC_ORIENTATION_FLIP_180, 110, 1720);
-    assert_transformed_point(SC_ORIENTATION_FLIP_270, 310, 120);
-
-    const struct sc_size frame_size = {100, 200};
-    const SDL_Rect unrotated = {0, 0, 1000, 2000};
-    const SDL_Rect rotated = {0, 0, 2000, 1000};
-
-    assert(sc_touchmap_overlay_transform_radius(
-        7, &frame_size, &unrotated, SC_ORIENTATION_0) == 70);
-    assert(sc_touchmap_overlay_transform_radius(
-        7, &frame_size, &rotated, SC_ORIENTATION_90) == 70);
-}
-
-static void
 test_editor_keyboard_nudging(void) {
     struct sc_gptm_gamepad_touchmap *map =
         calloc(1, sizeof(*map) + 2 * sizeof(*map->buttons));
@@ -527,21 +489,11 @@ test_editor_keyboard_nudging(void) {
     assert(sc_touchmap_editor_get_mode(&editor)
            == SC_TOUCHMAP_EDITOR_MODE_SELECT);
 
-    sc_touchmap_editor_set_mode(&editor,
-                                SC_TOUCHMAP_EDITOR_MODE_PLACE_BUTTON);
-    assert(sc_touchmap_editor_get_mode(&editor)
-           == SC_TOUCHMAP_EDITOR_MODE_PLACE_BUTTON);
-    assert(!sc_touchmap_editor_try_start_drag(
-        &editor, map, (struct sc_point) {300, 400}));
     sc_touchmap_editor_set_mode(&editor, SC_TOUCHMAP_EDITOR_MODE_ADD_MENU);
     assert(sc_touchmap_editor_get_mode(&editor)
            == SC_TOUCHMAP_EDITOR_MODE_ADD_MENU);
-    sc_touchmap_editor_set_mode(&editor, SC_TOUCHMAP_EDITOR_MODE_PLACE_SKILL);
-    assert(sc_touchmap_editor_get_mode(&editor)
-           == SC_TOUCHMAP_EDITOR_MODE_PLACE_SKILL);
-    sc_touchmap_editor_set_mode(&editor, SC_TOUCHMAP_EDITOR_MODE_PLACE_WALK);
-    assert(sc_touchmap_editor_get_mode(&editor)
-           == SC_TOUCHMAP_EDITOR_MODE_PLACE_WALK);
+    assert(!sc_touchmap_editor_try_start_drag(
+        &editor, map, (struct sc_point) {300, 400}));
     sc_touchmap_editor_set_mode(&editor, SC_TOUCHMAP_EDITOR_MODE_SELECT);
 
     assert(!sc_touchmap_editor_nudge_selection(&editor, map, 1, 0, 1));
@@ -559,7 +511,7 @@ test_editor_keyboard_nudging(void) {
     assert(sc_touchmap_editor_nudge_selection(&editor, map, 0, -1, 10));
     assert(map->walk.radius == 50);
     assert(sc_touchmap_editor_nudge_selection(&editor, map, 0, 1, -100));
-    assert(map->walk.radius == SC_TOUCHMAP_MIN_RADIUS);
+    assert(map->walk.radius == SC_TOUCHMAP_WALK_RADIUS);
     assert(!sc_touchmap_editor_nudge_selection(&editor, map, 0, 1, -1));
 
     editor.selection.target = SC_TOUCHMAP_EDITOR_TARGET_BUTTON_CENTER;
@@ -612,7 +564,6 @@ main(int argc, char *argv[]) {
     test_touchmap_package_metadata_helpers();
     test_empty_touchmap_create_save();
     test_touchmap_mutation_helpers();
-    test_overlay_coordinate_transforms();
     test_editor_keyboard_nudging();
     return 0;
 }
