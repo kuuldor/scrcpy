@@ -13,7 +13,6 @@
 #include "shortcut_mod.h"
 #include "util/log.h"
 
-#include "touchmap/touchmap_overlay.h"
 #include "touchmap/touchmap_runtime.h"
 #include "events.h"
 
