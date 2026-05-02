@@ -71,14 +71,14 @@ shortcuts are currently hard-coded to Ctrl.
 
 1. Toggle the overlay with shortcut modifier + `E`.
 2. If no touchmap is loaded, click `NEW` to create an empty in-memory map.
-3. Click `EDIT` to enter edit mode.
-4. Use the toolbar:
-   - `ADD`: choose `BUTTON`, `SKILL`, or `WALK` to add the control at the
-     center of the screen.
-   - `DEL`: delete the selected control.
+3. Click `EDIT` (top-right button) to enter edit mode.
+4. In edit mode, a toolbar appears with these buttons:
+   - `ADD`: opens a dropdown with `BUTTON`, `SKILL`, or `WALK` items.
+     Select an item to add that control at the center of the screen.
+   - `DEL`: delete the currently selected control (Walk, Button, or Skill).
    - `QUIT`: leave edit mode, with a save prompt if there are unsaved changes.
-5. Select a button or skill, then press a gamepad button or trigger to bind it.
-   There is no separate Bind button.
+5. Select a button or skill control, then press a gamepad button or trigger
+   to bind it. There is no separate Bind button.
 6. Save with `Ctrl+S` or `Ctrl+Shift+S`.
 
 Editing gestures:
@@ -126,20 +126,26 @@ Supported button names include:
 - `UP`, `DOWN`, `LEFT`, `RIGHT`
 - `MISC`, `PADDLE1`, `PADDLE2`, `PADDLE3`, `PADDLE4`, `TOUCHPAD`
 
+Note: `SELECT`, `HOME`, `L3`, `R3`, `L1`, `L2`, `R1`, `R2` are accepted as
+input aliases but are normalized on save to `BACK`, `GUIDE`, `LTHUMB`,
+`RTHUMB`, `LB`, `LT`, `RB`, `RT` respectively.
+
 ## File Locations
 
-- **Runtime model and JSON**: `/home/lucd/work/scrcpy/app/src/touchmap/touchmap.{c,h}`
-- **State and dialog handling**: `/home/lucd/work/scrcpy/app/src/touchmap/touchmap_state.{c,h}`
-- **Runtime gamepad-to-touch**: `/home/lucd/work/scrcpy/app/src/touchmap/touchmap_runtime.{c,h}`
-- **Editor logic**: `/home/lucd/work/scrcpy/app/src/touchmap/touchmap_editor.{c,h}`
-- **Auto-loader (package-indexed)**: `/home/lucd/work/scrcpy/app/src/touchmap/touchmap_loader.{c,h}`
-- **Overlay rendering**: `/home/lucd/work/scrcpy/app/src/touchmap/ui_touchmap_layer.{c,h}`
-- **Overlay coordinate transforms**: `/home/lucd/work/scrcpy/app/src/touchmap/touchmap_overlay.{c,h}`
-- **Shared circle drawing**: `/home/lucd/work/scrcpy/app/src/ui/ui_draw.{c,h}`
-- **Circle widget**: `/home/lucd/work/scrcpy/app/src/ui/ui_widget_circle_button.{c,h}`
-- **Input integration and shortcuts**: `/home/lucd/work/scrcpy/app/src/input_manager.c`
-- **Display integration**: `/home/lucd/work/scrcpy/app/src/display.{c,h}`
-- **Maintained design doc**: `/home/lucd/work/scrcpy/TOUCHMAP.md`
+- **Runtime model and JSON**: `app/src/touchmap/touchmap.{c,h}`
+- **State and dialog handling**: `app/src/touchmap/touchmap_state.{c,h}`
+- **Runtime gamepad-to-touch**: `app/src/touchmap/touchmap_runtime.{c,h}`
+- **Editor logic**: `app/src/touchmap/touchmap_editor.{c,h}`
+- **Auto-loader (package-indexed)**: `app/src/touchmap/touchmap_loader.{c,h}`
+- **Foreground-app detection**: `app/src/fg_app_detect.{c,h}`
+- **Overlay UI (rendering, toolbar, menus)**: `app/src/touchmap/ui_touchmap_layer.{c,h}`
+- **UI layer registration and coordinate transforms**: `app/src/ui/ui_context.{c,h}`
+- **Shared circle drawing**: `app/src/ui/ui_draw.{c,h}`
+- **Circle widget**: `app/src/ui/ui_widget_circle_button.{c,h}`
+- **Screen integration**: `app/src/screen.{c,h}`
+- **Input integration and shortcuts**: `app/src/input_manager.{c,h}`
+- **Display integration**: `app/src/display.{c,h}`
+- **Maintained design doc**: `TOUCHMAP.md`
 
 ## Troubleshooting
 
@@ -164,33 +170,60 @@ Supported button names include:
 ## Development Notes
 
 ### How It Works
-1. SDL draws the device screen texture
-2. Overlay module draws semi-transparent circles on top
-3. Input manager translates gamepad state into virtual Android touch events
-4. Editor mode mutates the in-memory touchmap and marks it dirty
+1. SDL draws the device screen texture via `sc_display_render()`
+2. `sc_ui_context_render()` iterates registered UI layers, including the
+   touchmap overlay which draws semi-transparent circles on top
+3. Input manager routes gamepad events to `sc_touchmap_runtime_handle_event()`,
+   which translates state into virtual Android touch events
+4. Editor mode mutates the in-memory touchmap and marks it dirty; it disables
+   both gamepad-to-touch output and mouse injection to the device
 5. Save rebuilds known JSON sections while preserving unknown metadata
 
 ### Key Functions
-- `parse_touchmap_config()` - Load touchmap JSON
-- `save_touchmap_config()` - Save touchmap JSON
-- `sc_touchmap_state_load_file()` - Load touchmap file into state
-- `sc_touchmap_state_save()` - Save touchmap to file
+- `parse_touchmap_config()` - Load touchmap JSON from file
+- `save_touchmap_config()` - Save touchmap JSON to file, preserving metadata
+- `sc_touchmap_runtime_simulate_touch()` - Inject a virtual touch event
 - `sc_touchmap_runtime_handle_event()` - Handle gamepad axis/button event
+- `sc_touchmap_state_load_file()` - Load touchmap file into state
+- `sc_touchmap_state_load_auto_file()` - Load touchmap via auto-loader
+- `sc_touchmap_state_load_manual_file()` - Load touchmap as manual override
+- `sc_touchmap_state_save()` - Save touchmap to file (normal or Save As)
+- `sc_touchmap_state_enter_edit_mode()` - Enter edit mode (releases touches)
+- `sc_touchmap_state_add_button_at_center()` - Add button/skill at screen center
+- `sc_touchmap_state_add_walk_at_center()` - Add walk control at screen center
+- `sc_touchmap_state_on_foreground_app_changed()` - Handle FG app auto-switch
+- `sc_touchmap_state_maybe_apply_deferred_switch()` - Apply deferred auto-switch
+- `sc_touchmap_state_reload_file()` - Discard edits, reload from disk
+- `sc_touchmap_state_create_empty()` - Create empty in-memory touchmap
 - `sc_ui_touchmap_layer_render()` - Main overlay drawing function
 - `sc_ui_touchmap_layer_handle_event()` - Toolbar and menu event handling
 - `sc_touchmap_editor_try_start_drag()` - Edit-mode hit testing
+- `sc_touchmap_editor_apply_drag()` - Apply drag movement in edit mode
+- `sc_touchmap_editor_nudge_selection()` - Nudge selected control (keyboard)
 - `sc_gptm_gamepad_touchmap_add_button()` - Append button/skill mapping
+- `sc_gptm_gamepad_touchmap_remove_button()` - Remove button/skill mapping
 - `sc_gptm_gamepad_touchmap_bind_button()` - Bind or rebind selected mapping
-- `sc_ui_widget_circle_button_render()` - Render a circle widget (used by overlay)
-- `sc_ui_draw_fill_circle()` - Draw a filled circle with coordinate conversion
+- `sc_gptm_gamepad_touchmap_set_walk()` - Set walk control
+- `sc_gptm_gamepad_touchmap_remove_walk()` - Remove walk control
+- `sc_ui_widget_circle_button_render()` - Render a circle widget
+- `sc_ui_draw_fill_circle()` - Draw a filled circle
 - `sc_ui_draw_circle_outline()` - Draw a circle outline (solid or dashed)
 - `sc_touchmap_loader_find_path()` - Find touchmap path for package name
+- `sc_touchmap_loader_rebuild_index()` - Rebuild package-to-path index
+- `sc_touchmap_read_package_name()` - Read packageName from JSON file
+- `sc_touchmap_build_default_filename()` - Build `<package>.json` filename
 
 ### Architecture
 ```
-Gamepad input → input_manager → touchmap lookup → virtual Android touch events
-                          ↓
-                   overlay/editor UI (via ui_widget_circle_button)
+Gamepad input → input_manager → touchmap_runtime → virtual Android touch events
+          ↓
+    touchmap_state
+          ↓
+    ui_touchmap_layer (registered in ui_context) → overlay rendering
+          ↓
+    touchmap_editor → edit-mode drag/select/nudge
+          ↓
+    touchmap_loader → auto package-based selection
 ```
 
 ---

@@ -44,7 +44,7 @@ hard-coded Ctrl. The save shortcuts are currently hard-coded to Ctrl.
 
 ## Data Model
 
-The runtime model is defined in `app/src/touchmap.h`.
+The runtime model is defined in `app/src/touchmap/touchmap.h`.
 
 `struct sc_gptm_gamepad_touchmap` owns:
 
@@ -78,7 +78,7 @@ The runtime model is defined in `app/src/touchmap.h`.
 - `json_entry`: non-owning pointer into `json_root` for the JSON object that
   stores this control.
 
-`struct sc_touchmap_editor`, defined in `app/src/touchmap_editor.h`, owns edit
+`struct sc_touchmap_editor`, defined in `app/src/touchmap/touchmap_editor.h`, owns edit
 selection and drag state. It tracks the selected target and the active drag
 target separately, so later editor actions can operate on the selected control
 without depending on the input manager.
@@ -90,7 +90,7 @@ coordinates.
 
 ## JSON Format
 
-Touchmap files are parsed by `parse_touchmap_config()` in `app/src/touchmap.c`
+Touchmap files are parsed by `parse_touchmap_config()` in `app/src/touchmap/touchmap.c`
 and saved by `save_touchmap_config()`.
 
 Supported mapping sections:
@@ -149,10 +149,14 @@ Supported button names include:
 - SDL extras: `MISC`, `PADDLE1`, `PADDLE2`, `PADDLE3`, `PADDLE4`,
   `TOUCHPAD`
 
+Note: `SELECT`, `HOME`, `L3`, `R3`, `L1`, `L2`, `R1`, `R2` are accepted as
+input aliases but are normalized on save to `BACK`, `GUIDE`, `LTHUMB`,
+`RTHUMB`, `LB`, `LT`, `RB`, `RT` respectively.
+
 ## Runtime Input Flow
 
 The main runtime logic is split between `app/src/input_manager.c` and
-`app/src/touchmap_runtime.c`.
+`app/src/touchmap/touchmap_runtime.c`.
 
 When no touchmap is loaded, gamepad input follows scrcpy's normal gamepad
 processor path.
@@ -164,7 +168,7 @@ When a touchmap is loaded:
 3. The runtime module updates `game_touchmap->joystick` with left and right stick values.
 4. Walk and skill-cast are processed immediately by `sc_touchmap_runtime_handle_walk()`
    and `sc_touchmap_runtime_handle_skill_cast()`.
-5. Touch events are injected through `simulate_virtual_touch()` as
+5. Touch events are injected through `sc_touchmap_runtime_simulate_touch()` as
    `SC_CONTROL_MSG_TYPE_INJECT_TOUCH_EVENT`.
 
 Walk behavior:
@@ -199,13 +203,15 @@ Edit-mode safety:
 
 ## Overlay Rendering
 
-The overlay is initialized and owned by `struct sc_display` in
-`app/src/display.h`.
+The overlay layer (`struct sc_ui_touchmap_layer`) is stored in `struct sc_screen`
+in `app/src/screen.h` and registered as a UI layer into `struct sc_ui_context`
+(`app/src/ui/ui_context.h`) with z-index 10 in `app/src/screen.c`.
 
 The render flow is:
 
 1. `sc_display_render()` draws the device frame.
-2. If a touchmap is attached, it calls `sc_ui_touchmap_layer_render()`.
+2. `sc_ui_context_render()` iterates all registered UI layers, including
+   `sc_ui_touchmap_layer_render()` for the touchmap overlay.
 3. The overlay draws into the same SDL renderer before `SDL_RenderPresent()`.
 
 Current visual elements:
@@ -219,8 +225,10 @@ Current visual elements:
 - Button labels: built-in bitmap glyphs for common controller labels.
 - Selection highlight: yellow multi-ring outline around the selected center or
   radius target in edit mode.
-- Edit control: green `EDIT` or red `QUIT` button in the top-right of the
-  content rect.
+- Edit control: `EDIT` button in the top-right of the content rect.
+- Edit toolbar: `ADD`, `DEL`, and `QUIT` buttons below the `EDIT` button.
+  The `ADD` button opens a dropdown with `BUTTON`, `SKILL`, and `WALK`
+  items (Walk disabled if one already exists).
 
 The overlay code applies display orientation transforms so rendered mapping
 positions follow scrcpy orientation changes. Stored coordinates remain in
@@ -228,9 +236,10 @@ unrotated frame coordinates.
 
 ## Edit Mode
 
-Edit mode is coordinated by `app/src/touchmap_state.c`, but editor hit testing,
-selection state, and drag mutation live in `app/src/touchmap_editor.c`. Visual
-feedback is rendered by `app/src/ui_touchmap_layer.c`.
+Edit mode is coordinated by `app/src/touchmap/touchmap_state.c`, but editor
+hit testing, selection state, and drag mutation live in
+`app/src/touchmap/touchmap_editor.c`. Visual feedback is rendered by
+`app/src/touchmap/ui_touchmap_layer.c`.
 
 Entering edit mode:
 
@@ -265,7 +274,7 @@ Minimum radius:
 - Buttons and skills clamp to `SC_TOUCHMAP_BUTTON_RADIUS`, currently `24`.
 - Walk controls clamp to `SC_TOUCHMAP_WALK_RADIUS`, currently `32`.
 
-Planned add/remove workflow:
+Add/Remove and Binding Workflow:
 
 - Edit mode shows a floating toolbar on top of the overlay with `ADD`, `DEL`,
   and `QUIT` buttons. The old top-right `QUIT` button moved into this toolbar.
@@ -292,7 +301,7 @@ Planned add/remove workflow:
   red controls.
 - `Esc` cancels the pending add operation.
 - New regular button mappings use radius `SC_TOUCHMAP_BUTTON_RADIUS`, currently `24`.
-- New skill mappings use radius `SC_TOUCHMAP_WALK_RADIUS`, currently `32`.
+- New skill mappings use radius `SC_TOUCHMAP_BUTTON_RADIUS`, currently `24`.
 - Newly added controls are selected after addition. Removed controls clear
   selection or select a nearby remaining control.
 - After a successful add, remove, or bind operation, the map is marked dirty and
@@ -300,42 +309,68 @@ Planned add/remove workflow:
 
 ## File and Module Responsibilities
 
-- `app/src/touchmap.h`: runtime touchmap structs and public parser/saver API.
-- `app/src/touchmap.c`: JSON parsing, JSON saving, button name conversion, and
-  button sorting for binary search. Saving preserves unknown metadata and
-  relinks the retained JSON model after successful writes.
-- `app/src/touchmap_state.h`: touchmap load/unload/save state, overlay display/edit
-  mode state, dirty tracking, auto-mode state, and screen refresh orchestration.
-- `app/src/touchmap_state.c`: touchmap state management, dialog handling,
-  foreground-app change handling, add-at-center actions, and screen refresh logic.
-- `app/src/touchmap_runtime.h`: runtime gamepad-to-touch simulation API.
-- `app/src/touchmap_runtime.c`: controller event handling, button press/release,
-  walk and skill-cast simulation, and touch injection.
-- `app/src/touchmap_editor.h`: editor selection and drag state API.
-- `app/src/touchmap_editor.c`: editor hit testing, selection updates, and drag
-  mutation of touchmap controls.
-- `app/src/input_manager.h`: input manager state and shortut handling fields.
-- `app/src/input_manager.c`: shortcut handling and gamepad event routing to the runtime
-  module.
-- `app/src/touchmap/touchmap_loader.h`: auto-loader state, directory path, package index struct.
-- `app/src/touchmap/touchmap_loader.c`: directory scanning, JSON `packageName` extraction, package-to-path index, and rebuild helpers.
-- `app/src/touchmap/touchmap_overlay.h`: overlay coordinate transform API.
-- `app/src/touchmap/touchmap_overlay.c`: SDL overlay coordinate transforms.
-- `app/src/touchmap/ui_touchmap_layer.h`: UI layer rendering and hit testing API.
-- `app/src/touchmap/ui_touchmap_layer.c`: SDL overlay drawing, widget creation,
-  coordinate transforms, glyph labels, selection highlighting, edit button
-  layout, and overlay visibility/edit-mode state. Uses
-  `sc_ui_widget_circle_button` for button and walk rendering.
-- `app/src/ui/ui_draw.{c,h}`: shared drawing primitives including `sc_ui_draw_fill_circle()` and `sc_ui_draw_circle_outline()` for logical-to-drawable coordinate conversion.
-- `app/src/ui/ui_widget_circle_button.{c,h}`: reusable circle widget with hover/press/checked states, icon rendering, outer dashed outline, and touch-down marker support.
-- `app/src/display.h`: display-owned overlay state and active touchmap pointer.
-- `app/src/display.c`: overlay initialization, destruction, rendering, and
-  display-level touchmap setters/toggles.
-- `app/src/screen.c`: window/drawable/frame coordinate conversion and routing
-  SDL events into the input manager.
+- `app/src/touchmap/touchmap.h`: runtime touchmap structs and public parser/saver API.
+- `app/src/touchmap/touchmap.c`: JSON parsing, JSON saving, button name conversion,
+  button sorting for binary search, add/remove helpers for buttons and walk,
+  package metadata extraction/stamping, and save-time metadata preservation.
+- `app/src/touchmap/touchmap_state.h`: touchmap load/unload/save state, overlay
+  display/edit mode state, dirty tracking, auto-mode state, and screen refresh
+  orchestration.
+- `app/src/touchmap/touchmap_state.c`: touchmap state management, dialog handling,
+  foreground-app change handling, add-at-center actions, empty map creation,
+  and screen refresh logic.
+- `app/src/touchmap/touchmap_runtime.h`: runtime gamepad-to-touch simulation API.
+- `app/src/touchmap/touchmap_runtime.c`: controller event handling,
+  `sc_touchmap_runtime_simulate_touch()` injection, walk and skill-cast
+  simulation, and edit-mode output suppression.
+- `app/src/touchmap/touchmap_editor.h`: editor selection and drag state API.
+- `app/src/touchmap/touchmap_editor.c`: editor hit testing, selection updates,
+  drag mutation of touchmap controls, nudge by keyboard, and delete-selected.
+- `app/src/touchmap/touchmap_utils.h`: thread-start helper
+  `sc_touchmap_start_thread()` used by dialog handling.
+- `app/src/input_manager.h`: input manager state including embedded
+  `sc_touchmap_state`, shortcut modifier, and `sc_fg_app_detect`.
+- `app/src/input_manager.c`: shortcut handling, gamepad event routing to the
+  runtime module, SDL custom-event dispatch for `SC_EVENT_FG_APP_CHANGED`, and
+  touchmap save/open dialog triggering.
+- `app/src/touchmap/touchmap_loader.h`: auto-loader state, directory path,
+  package-to-path index struct.
+- `app/src/touchmap/touchmap_loader.c`: directory scanning, JSON `packageName`
+  extraction, package-to-path index, rebuild helpers, and exact-match lookup.
+- `app/src/fg_app_detect.h`: foreground-app detector state and polling API.
+- `app/src/fg_app_detect.c`: host-side foreground-package polling via
+  `dumpsys`, debounce, and posting `SC_EVENT_FG_APP_CHANGED`.
+- `app/src/touchmap/ui_touchmap_layer.h`: UI layer rendering, event handling,
+  toolbar, and menu API.
+- `app/src/touchmap/ui_touchmap_layer.c`: SDL overlay drawing via
+  `sc_ui_context_render()`, widget creation (EDIT button, toolbar with ADD/DEL/
+  QUIT, ADD dropdown with BUTTON/SKILL/WALK), glyph labels, selection
+  highlighting, touch-down markers, and binding capture.
+  Uses `sc_ui_widget_circle_button` for button and walk rendering.
+- `app/src/ui/ui_draw.{c,h}`: shared drawing primitives including
+  `sc_ui_draw_fill_circle()` and `sc_ui_draw_circle_outline()`.
+- `app/src/ui/ui_widget_circle_button.{c,h}`: reusable circle widget with
+  hover/press/checked states, icon rendering, outer dashed outline, and
+  touch-down marker support.
+- `app/src/ui/ui_context.{c,h}`: UI layer registration, event dispatch, and
+  coordinate transforms (logical↔drawable↔frame) used by the touchmap overlay.
+- `app/src/display.h`: receives `const struct sc_touchmap_state *` for
+  pass-through to the UI context.
+- `app/src/display.c`: passes `touchmap_state` to `sc_ui_context_render()` and
+  `sc_ui_context_handle_event()`; does not own overlay state.
+- `app/src/screen.h`: owns `struct sc_ui_touchmap_layer` and registers it into
+  `sc_ui_context` for rendering and input handling.
+- `app/src/screen.c`: initializes the touchmap UI layer with z-index 10 in the
+  UI context, handles SDL event routing into the input manager, and manages
+  orientation transforms.
 - `app/tests/test_touchmap.c`: focused tests for touchmap JSON parse/save
-  metadata preservation and overlay coordinate transforms.
-- `app/meson.build`: includes touchmap modules and links libm for math functions.
+  metadata preservation, mutation helpers, and editor nudging.
+- `app/tests/test_touchmap_loader.c`: focused tests for directory indexing,
+  package resolution, and duplicate handling.
+- `app/tests/test_touchmap_state.c`: focused tests for auto-switch decision
+  logic.
+- `app/meson.build`: registers all touchmap modules under `src/touchmap/` and
+  links libm for math functions.
 
 ## Known Limitations
 
@@ -356,18 +391,21 @@ The previous docs were correct that:
 - Runtime loading through a file dialog is supported.
 - The overlay updates live from current touch state.
 - The implementation is integrated through `display`, `input_manager`,
-  `touchmap_overlay`, and Meson.
+  `screen`, `ui_context`, and Meson.
 
 The previous docs are stale or incomplete in these areas:
 
 - Regular buttons are green in the current code, not red.
 - Walk control is low-opacity white in the current code, not green.
-- Button labels are already implemented with built-in glyphs; SDL_ttf is not
-- Overlay orientation transforms are already implemented and covered by focused
-  tests.
+- Button labels are implemented with built-in glyphs; SDL_ttf is not used.
+- Overlay orientation transforms are implemented via `sc_ui_context` coordinate
+  functions in `ui_context.{c,h}` and covered by focused tests.
 - Edit mode, dirty tracking, and save prompts are now part of the feature.
 - Shortcuts should be described as scrcpy shortcut modifier combinations where
   applicable, not always Ctrl combinations.
+- Overlay coordinate transforms were originally described in a separate
+  `touchmap_overlay.h/c` module that no longer exists; this functionality lives
+  in `ui_context.{c,h}` and `ui_touchmap_layer.c`.
 
 ## Design Decisions
 
@@ -586,8 +624,8 @@ Current behavior:
 
 #### Host-Side Auto-Load Modules
 
-- `app/src/touchmap_loader.h`
-- `app/src/touchmap_loader.c`
+- `app/src/touchmap/touchmap_loader.h`
+- `app/src/touchmap/touchmap_loader.c`
 - `app/src/fg_app_detect.h`
 - `app/src/fg_app_detect.c`
 
